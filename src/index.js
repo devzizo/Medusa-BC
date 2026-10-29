@@ -1,4 +1,4 @@
-import { middlewareStatus } from "./config.js";
+import { middlewareApi } from "./config.js";
 
 const PAGE_SIZE = 24;
 
@@ -8,8 +8,8 @@ export default {
     if (url.pathname === "/api/products") {
       return listProducts(url, env);
     }
-    if (url.pathname === "/api/middleware/status") {
-      return middlewareStatus(request, env);
+    if (url.pathname.startsWith("/api/middleware/")) {
+      return middlewareApi(request, env, url.pathname);
     }
     return env.ASSETS.fetch(request);
   },

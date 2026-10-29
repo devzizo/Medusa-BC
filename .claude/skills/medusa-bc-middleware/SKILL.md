@@ -26,8 +26,9 @@ It replaces the in-Medusa plugin `@hoven/medusa-bc` (repo `devzizo/essentials-st
   `npx wrangler secret put <NAME>` or a local `.dev.vars` (git-ignored). Never in `wrangler.jsonc`,
   never echoed, logged, returned by an endpoint, or pasted into chat. Ask the owner to set them;
   do not ask for their values.
-- `src/config.js` reads and validates settings; `/api/middleware/status` reports set/missing and, with
-  `?check=1`, tests both sides live.
+- `src/config.js` reads and validates settings: `GET /api/middleware/status` reports set/missing,
+  `POST /api/middleware/check/medusa` and `/check/bc` test each side live. The landing page
+  (`public/index.html`) shows both as tabs.
 - Medusa secret key header: `Authorization: Basic <sk_…>`. Bearer returns 401.
 
 ## Rules that are not visible in the code

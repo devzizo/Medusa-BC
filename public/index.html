@@ -3,109 +3,154 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>هوفن — المنتجات</title>
+  <title>Medusa-BC — فحص الاتصال</title>
   <style>
-    :root {
-      --bg: #f7f5f2; --card: #ffffff; --text: #1c1917; --muted: #78716c;
-      --border: #e7e5e4; --accent: #1e3a8a;
-    }
-    @media (prefers-color-scheme: dark) {
-      :root { --bg: #0c0a09; --card: #1c1917; --text: #f5f5f4; --muted: #a8a29e; --border: #292524; --accent: #93c5fd; }
-    }
-    * { box-sizing: border-box; margin: 0; }
-    body { background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, "Segoe UI", Tahoma, sans-serif; }
-    header { padding: 48px 16px 24px; text-align: center; }
-    h1 { font-size: clamp(2rem, 6vw, 3rem); letter-spacing: -0.02em; }
-    header p { color: var(--muted); margin-top: 8px; }
-    .search { display: flex; justify-content: center; padding: 0 16px 24px; }
-    .search input {
-      width: 100%; max-width: 420px; padding: 12px 16px; font: inherit; color: var(--text);
-      background: var(--card); border: 1px solid var(--border); border-radius: 999px;
-    }
-    main { max-width: 1200px; margin: 0 auto; padding: 0 16px 48px; }
-    .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
-    .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; }
-    .card img { width: 100%; aspect-ratio: 1; object-fit: cover; background: var(--border); display: block; }
-    .card .body { padding: 12px; display: flex; flex-direction: column; gap: 6px; flex: 1; }
-    .card h2 { font-size: 0.95rem; font-weight: 600; line-height: 1.4; }
-    .price { color: var(--accent); font-weight: 700; margin-top: auto; }
-    .status { text-align: center; color: var(--muted); padding: 24px 0; }
-    .more { display: block; margin: 24px auto 0; padding: 12px 28px; font: inherit; font-weight: 600; color: #fff; background: #1e3a8a; border: 0; border-radius: 999px; cursor: pointer; }
-    .more[hidden] { display: none; }
+    :root { --bg: #f6f5f1; --panel: #fff; --text: #141414; --muted: #6b6b6b; --line: #e3e0d8; --accent: #294036; --ok: #1f6b3a; --okbg: #e8f3ec; --err: #9b2c1f; --errbg: #f8ebe8; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, "Segoe UI", Tahoma, sans-serif; line-height: 1.6; }
+    main { max-width: 760px; margin: 0 auto; padding: 32px 16px 64px; }
+    h1 { font-size: 1.6rem; margin: 0 0 4px; }
+    .sub { color: var(--muted); margin: 0 0 24px; }
+    .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 2px; padding: 20px; }
+    label { display: block; font-weight: 600; margin-bottom: 6px; }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; }
+    input { flex: 1; min-width: 200px; padding: 10px 12px; font: inherit; border: 1px solid var(--line); border-radius: 2px; background: #fff; direction: ltr; text-align: left; }
+    button { padding: 10px 18px; font: inherit; font-weight: 600; border: 1px solid var(--accent); border-radius: 2px; cursor: pointer; background: var(--accent); color: #fff; }
+    button.ghost { background: #fff; color: var(--accent); }
+    button:disabled { opacity: .5; cursor: default; }
+    .hint { color: var(--muted); font-size: .85rem; margin: 6px 0 0; }
+    .tabs { display: flex; gap: 0; margin: 24px 0 0; border-bottom: 1px solid var(--line); }
+    .tab { background: none; color: var(--muted); border: 0; border-bottom: 2px solid transparent; border-radius: 0; padding: 10px 16px; }
+    .tab[aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); }
+    .tabpanel { border-top: 0; }
+    table { width: 100%; border-collapse: collapse; margin: 0 0 16px; font-size: .92rem; }
+    td { padding: 8px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+    td:first-child { font-family: ui-monospace, Menlo, Consolas, monospace; direction: ltr; text-align: left; width: 45%; }
+    td[colspan] { font-family: inherit; direction: rtl; text-align: right; color: var(--muted); }
+    td.v { direction: ltr; text-align: left; color: var(--muted); word-break: break-all; }
+    .tag { display: inline-block; padding: 0 8px; border-radius: 2px; font-size: .8rem; font-weight: 600; }
+    .tag.set { background: var(--okbg); color: var(--ok); }
+    .tag.missing { background: var(--errbg); color: var(--err); }
+    .result { margin-top: 16px; padding: 12px 14px; border-radius: 2px; display: none; }
+    .result.ok { display: block; background: var(--okbg); color: var(--ok); }
+    .result.err { display: block; background: var(--errbg); color: var(--err); }
+    .result ul { margin: 8px 0 0; padding-inline-start: 20px; color: var(--text); }
+    .result code { direction: ltr; unicode-bidi: embed; }
+    .error { color: var(--err); margin-top: 12px; }
+    footer { margin-top: 32px; color: var(--muted); font-size: .85rem; }
+    footer a { color: var(--accent); }
   </style>
 </head>
 <body>
-  <header>
-    <h1>هوفن</h1>
-    <p id="count">جاري تحميل المنتجات…</p>
-  </header>
-  <form class="search" id="search">
-    <input type="search" name="q" placeholder="ابحث عن منتج…" aria-label="بحث">
-  </form>
   <main>
-    <div class="grid" id="grid"></div>
-    <p class="status" id="status" hidden></p>
-    <button class="more" id="more" hidden>عرض المزيد</button>
+    <h1>Medusa-BC</h1>
+    <p class="sub">الوسيط بين متجر Medusa و Microsoft Dynamics 365 Business Central. هنا تفحص اتصال كل طرف بالإعدادات المحفوظة في Cloudflare.</p>
+
+    <section class="panel">
+      <label for="token">توكن الوسيط (MIDDLEWARE_ADMIN_TOKEN)</label>
+      <div class="row">
+        <input id="token" type="password" autocomplete="off" placeholder="الصق التوكن هنا" data-testid="token">
+        <button id="load" data-testid="load">عرض الإعدادات</button>
+      </div>
+      <p class="hint">يبقى في هذا التبويب من المتصفح فقط، ويُمسح عند إغلاقه.</p>
+      <p class="error" id="token-error" hidden data-testid="token-error"></p>
+    </section>
+
+    <div class="tabs" role="tablist">
+      <button class="tab" role="tab" id="tab-bc" aria-controls="panel-bc" aria-selected="true" data-testid="tab-bc">Business Central</button>
+      <button class="tab" role="tab" id="tab-medusa" aria-controls="panel-medusa" aria-selected="false" data-testid="tab-medusa">Medusa</button>
+    </div>
+
+    <section class="panel tabpanel" role="tabpanel" id="panel-bc" aria-labelledby="tab-bc" data-testid="panel-bc">
+      <table><tbody id="settings-bc"><tr><td colspan="2">اعرض الإعدادات أولًا.</td></tr></tbody></table>
+      <button id="check-bc" class="ghost" disabled data-testid="check-bc">فحص الاتصال بـ Business Central</button>
+      <div class="result" id="result-bc" data-testid="result-bc"></div>
+    </section>
+
+    <section class="panel tabpanel" role="tabpanel" id="panel-medusa" aria-labelledby="tab-medusa" hidden data-testid="panel-medusa">
+      <table><tbody id="settings-medusa"><tr><td colspan="2">اعرض الإعدادات أولًا.</td></tr></tbody></table>
+      <button id="check-medusa" class="ghost" disabled data-testid="check-medusa">فحص الاتصال بـ Medusa</button>
+      <div class="result" id="result-medusa" data-testid="result-medusa"></div>
+    </section>
+
+    <footer>
+      الأسرار تُضبط بـ <code>npx wrangler secret put</code> ولا تظهر هنا أبدًا. ·
+      <a href="/products">صفحة المنتجات</a>
+    </footer>
   </main>
+
   <script>
-    const grid = document.getElementById("grid");
-    const more = document.getElementById("more");
-    const status = document.getElementById("status");
-    const countEl = document.getElementById("count");
-    const fmt = (amount, currency) =>
-      new Intl.NumberFormat("ar-SA", { style: "currency", currency: (currency || "sar").toUpperCase() }).format(amount);
+    const $ = (id) => document.getElementById(id);
+    const KEY = "medusa-bc-token";
+    try { $("token").value = sessionStorage.getItem(KEY) ?? ""; } catch {}
 
-    let offset = 0, query = "";
+    const escape = (text) => String(text).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 
-    async function load(reset) {
-      if (reset) { offset = 0; grid.replaceChildren(); }
-      more.hidden = true;
-      status.hidden = false;
-      status.textContent = "جاري التحميل…";
+    const call = async (path, method = "GET") => {
+      const token = $("token").value.trim();
+      try { sessionStorage.setItem(KEY, token); } catch {}
+      const res = await fetch(path, { method, headers: { authorization: `Bearer ${token}` } });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(res.status === 401 ? "التوكن غير صحيح." : body.error || `HTTP ${res.status}`);
+      return body;
+    };
+
+    for (const tab of document.querySelectorAll(".tab")) {
+      tab.addEventListener("click", () => {
+        for (const other of document.querySelectorAll(".tab")) {
+          const selected = other === tab;
+          other.setAttribute("aria-selected", String(selected));
+          $(other.getAttribute("aria-controls")).hidden = !selected;
+        }
+      });
+    }
+
+    const renderSettings = (target, rows) => {
+      $(target).innerHTML = rows.map((row) => `
+        <tr>
+          <td>${escape(row.name)}</td>
+          <td class="v">${row.set ? '<span class="tag set">مضبوط</span>' : '<span class="tag missing">ناقص</span>'}
+            ${!row.secret && row.value ? " " + escape(row.value) : ""}${row.secret && row.set ? " (سرّي)" : ""}</td>
+        </tr>`).join("");
+    };
+
+    $("load").addEventListener("click", async () => {
+      $("token-error").hidden = true;
+      $("load").disabled = true;
       try {
-        const res = await fetch(`/api/products?offset=${offset}&q=${encodeURIComponent(query)}`);
-        if (!res.ok) throw new Error(res.status);
-        const data = await res.json();
-        for (const p of data.products) grid.append(card(p));
-        offset += data.products.length;
-        countEl.textContent = `${data.count.toLocaleString("ar-SA")} منتج`;
-        status.hidden = data.count > 0;
-        status.textContent = "لا توجد منتجات";
-        more.hidden = offset >= data.count;
-      } catch {
-        status.textContent = "تعذر تحميل المنتجات، حاول مرة ثانية.";
+        const { settings } = await call("/api/middleware/status");
+        renderSettings("settings-bc", settings.bc);
+        renderSettings("settings-medusa", settings.medusa);
+        $("check-bc").disabled = false;
+        $("check-medusa").disabled = false;
+      } catch (error) {
+        $("token-error").textContent = error.message;
+        $("token-error").hidden = false;
+      } finally {
+        $("load").disabled = false;
       }
-    }
-
-    function card(p) {
-      const el = document.createElement("article");
-      el.className = "card";
-      const img = document.createElement("img");
-      img.loading = "lazy";
-      img.alt = p.title;
-      if (p.thumbnail) img.src = p.thumbnail;
-      const body = document.createElement("div");
-      body.className = "body";
-      const h = document.createElement("h2");
-      h.textContent = p.title;
-      body.append(h);
-      if (p.price != null) {
-        const price = document.createElement("span");
-        price.className = "price";
-        price.textContent = fmt(p.price, p.currency);
-        body.append(price);
-      }
-      el.append(img, body);
-      return el;
-    }
-
-    more.addEventListener("click", () => load(false));
-    document.getElementById("search").addEventListener("submit", (e) => {
-      e.preventDefault();
-      query = e.target.q.value.trim();
-      load(true);
     });
-    load(true);
+
+    const check = (side) => async () => {
+      const button = $(`check-${side}`);
+      const box = $(`result-${side}`);
+      button.disabled = true;
+      box.className = "result";
+      try {
+        const result = await call(`/api/middleware/check/${side}`, "POST");
+        const companies = (result.companies ?? [])
+          .map((c) => `<li>${escape(c.displayName)} — <code>${escape(c.id)}</code></li>`).join("");
+        box.innerHTML = `${result.ok ? "✓ " : "✗ "}${escape(result.message)}${companies ? `<ul>${companies}</ul>` : ""}`;
+        box.className = `result ${result.ok ? "ok" : "err"}`;
+      } catch (error) {
+        box.textContent = error.message;
+        box.className = "result err";
+      } finally {
+        button.disabled = false;
+      }
+    };
+    $("check-bc").addEventListener("click", check("bc"));
+    $("check-medusa").addEventListener("click", check("medusa"));
   </script>
 </body>
 </html>

@@ -111,10 +111,13 @@ secrets only via `wrangler secret put` (production) or `.dev.vars` (local, git-i
 
 ### 5.4 Settings endpoint
 
-`GET /api/middleware/status` (admin token) reports, **without ever returning a value**:
-which settings are set, which are missing, and, with `?check=1`, a live check of each side:
-Medusa (`GET /admin/stores` with the secret key) and BC (Entra token, then `GET /companies`, and
-whether `BC_COMPANY_ID` is among them). The first version of this endpoint is in `src/config.js`.
+All behind the admin token, in `src/config.js`, and shown on the landing page (a Business Central
+tab and a Medusa tab):
+
+- `GET /api/middleware/status`: which settings are set or missing, **never a secret's value**.
+- `POST /api/middleware/check/medusa`: `GET /admin/stores` with the secret key.
+- `POST /api/middleware/check/bc`: fresh Entra token, `GET /companies`, and whether `BC_COMPANY_ID`
+  is among them (the companies are listed so the right id can be copied).
 
 ## 6. Functional requirements
 

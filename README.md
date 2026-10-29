@@ -17,7 +17,10 @@ This Worker is becoming the middleware that syncs Business Central into Medusa f
 
 - `docs/PRD.md` — the full spec: architecture, settings, sync rules, acceptance criteria.
 - `.claude/skills/medusa-bc-middleware/SKILL.md` — how to build and verify it (for Claude Code).
-- `src/config.js` — the Medusa and BC token settings, and `GET /api/middleware/status`.
+- `src/config.js` — the Medusa and BC token settings and the middleware API (below).
+- `public/index.html` — the landing page: enter the middleware token, then a **Business Central** tab
+  and a **Medusa** tab, each listing its settings (set / missing) with a "check connection" button.
+  The old products page moved to `/products`.
 
 ### Settings
 
@@ -34,13 +37,13 @@ Locally, copy `.dev.vars.example` to `.dev.vars` (git-ignored).
 
 ### Check the connection
 
-```bash
-curl -H "Authorization: Bearer $MIDDLEWARE_ADMIN_TOKEN" \
-  "https://medusa-bc.dev-zizo.workers.dev/api/middleware/status?check=1"
-```
+Open the landing page, or call the API (all need `Authorization: Bearer $MIDDLEWARE_ADMIN_TOKEN`):
 
-It lists which settings are set or missing (never a secret's value) and, with `check=1`, connects to
-Medusa with the secret key and to Business Central with a fresh Entra token.
+| Route | Does |
+|---|---|
+| `GET /api/middleware/status` | Which settings are set or missing (never a secret's value). |
+| `POST /api/middleware/check/medusa` | Calls `GET /admin/stores` with the Medusa secret key. |
+| `POST /api/middleware/check/bc` | Gets a fresh Entra token, lists BC companies, confirms `BC_COMPANY_ID`. |
 
 ## Deploy
 

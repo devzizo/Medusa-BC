@@ -115,17 +115,25 @@ export function isAuthorized(request, env) {
   return diff === 0;
 }
 
-/** GET /api/middleware/status[?check=1] */
-export async function middlewareStatus(request, env) {
+const json = (body, status = 200) => Response.json(body, { status, headers: { "cache-control": "no-store" } });
+
+/**
+ * The middleware API, all behind MIDDLEWARE_ADMIN_TOKEN:
+ *   GET  /api/middleware/status        which settings are set or missing (never a secret's value)
+ *   POST /api/middleware/check/medusa  live check of the Medusa secret key
+ *   POST /api/middleware/check/bc      live check of the BC credentials and company
+ */
+export async function middlewareApi(request, env, pathname) {
   if (!value(env, "MIDDLEWARE_ADMIN_TOKEN")) {
-    return Response.json({ error: "MIDDLEWARE_ADMIN_TOKEN is not set; the middleware API is closed." }, { status: 503 });
+    return json({ error: "MIDDLEWARE_ADMIN_TOKEN is not set; the middleware API is closed." }, 503);
   }
-  if (!isAuthorized(request, env)) return Response.json({ error: "Unauthorized" }, { status: 401 });
-  const settings = describeSettings(env);
-  const check = new URL(request.url).searchParams.get("check") === "1";
-  const [medusa, bc] = check ? await Promise.all([checkMedusa(env), checkBusinessCentral(env)]) : [null, null];
-  return Response.json(
-    { settings: settings.groups, missing: settings.missing, ...(check ? { checks: { medusa, bc } } : {}) },
-    { headers: { "cache-control": "no-store" } },
-  );
+  if (!isAuthorized(request, env)) return json({ error: "Unauthorized" }, 401);
+
+  if (pathname === "/api/middleware/status" && request.method === "GET") {
+    const settings = describeSettings(env);
+    return json({ settings: settings.groups, missing: settings.missing });
+  }
+  if (pathname === "/api/middleware/check/medusa" && request.method === "POST") return json(await checkMedusa(env));
+  if (pathname === "/api/middleware/check/bc" && request.method === "POST") return json(await checkBusinessCentral(env));
+  return json({ error: "Not found" }, 404);
 }
