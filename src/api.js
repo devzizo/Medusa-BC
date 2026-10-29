@@ -1,6 +1,7 @@
 import { bcCredentials, listBcCompanies, listBcLocations, listBcPaymentMethods } from "./lib/bc.js";
 import { medusaClient } from "./lib/medusa.js";
 import { checkBusinessCentral, checkMedusa, describeSettings, isAuthorized } from "./config.js";
+import { DEFAULT_INVENTORY_SERVICE } from "./sync/inventory.js";
 import { DEFAULT_PRICE_LIST_LINE_SERVICE, DEFAULT_PRICE_LIST_SERVICE } from "./sync/items.js";
 
 // The middleware API behind the admin page. Everything the page saves lives
@@ -12,8 +13,8 @@ import { DEFAULT_PRICE_LIST_LINE_SERVICE, DEFAULT_PRICE_LIST_SERVICE } from "./s
 //   POST /api/middleware/settings               posting groups and price list service names
 //   GET  /api/middleware/mappings/{locations,payments}
 //   POST /api/middleware/mappings/{locations,payments}   { mappings: [{ id, code|null }] }
-//   GET  /api/middleware/items/runs
-//   POST /api/middleware/items/run
+//   GET  /api/middleware/{items,inventory}/runs
+//   POST /api/middleware/{items,inventory}/run
 
 const json = (body, status = 200) => Response.json(body, { status, headers: { "cache-control": "no-store" } });
 const fail = (message, status = 400) => json({ error: message }, status);
@@ -39,7 +40,7 @@ const MAPPINGS = {
   },
 };
 
-const PUBLIC_SETTINGS = ["vat_bus_posting_group", "gen_bus_posting_group", "price_list_service", "price_list_line_service"];
+const PUBLIC_SETTINGS = ["vat_bus_posting_group", "gen_bus_posting_group", "price_list_service", "price_list_line_service", "inventory_service"];
 
 export async function middlewareApi(request, env, pathname) {
   if (!isAuthorized(request, env)) return fail("Unauthorized", 401);
@@ -53,7 +54,11 @@ export async function middlewareApi(request, env, pathname) {
       settings: settings.groups,
       missing: settings.missing,
       saved: await db.getSettings(),
-      defaults: { price_list_service: DEFAULT_PRICE_LIST_SERVICE, price_list_line_service: DEFAULT_PRICE_LIST_LINE_SERVICE },
+      defaults: {
+        price_list_service: DEFAULT_PRICE_LIST_SERVICE,
+        price_list_line_service: DEFAULT_PRICE_LIST_LINE_SERVICE,
+        inventory_service: DEFAULT_INVENTORY_SERVICE,
+      },
     });
   }
   if (pathname === "/api/middleware/check/medusa" && method === "POST") return json(await checkMedusa(env));
@@ -109,11 +114,19 @@ export async function middlewareApi(request, env, pathname) {
     }
   }
 
-  if (pathname === "/api/middleware/items/runs" && method === "GET") return json({ runs: await db.listRuns("items") });
-  if (pathname === "/api/middleware/items/run" && method === "POST") {
-    if (!(await db.getSettings()).company_id) return fail("Choose a Business Central company in Settings first.", 409);
-    const started = await db.startRun("items");
-    return started.error ? fail(started.error, 409) : json(started, 202);
+  const sync = pathname.match(/^\/api\/middleware\/(items|inventory)\/(runs|run)$/);
+  if (sync) {
+    const [, kind, action] = sync;
+    if (action === "runs" && method === "GET") return json({ runs: await db.listRuns(kind) });
+    if (action === "run" && method === "POST") {
+      const saved = await db.getSettings();
+      if (!saved.company_id) return fail("Choose a Business Central company in Settings first.", 409);
+      if (kind === "inventory" && !(await db.getMappings("locations", saved.company_id)).length) {
+        return fail("Map at least one stock location to a BC location first (Locations tab).", 409);
+      }
+      const started = await db.startRun(kind);
+      return started.error ? fail(started.error, 409) : json(started, 202);
+    }
   }
 
   return fail("Not found", 404);

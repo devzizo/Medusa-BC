@@ -138,27 +138,27 @@ list pages over OData.
 | Products | One per non-blocked item, created as **draft**. Handle `bc-<slug(number)>`. Title = Display Name, subtitle = Display Name 2. Category from Item Category Code. |
 | Variants | One per non-blocked BC item variant; an item with none gets one default variant. SKU = `No.` or `No.-VariantCode`. Barcode = GTIN. Price = Unit Price (2 decimals). |
 | Handles | `slug(code)` = lower-case, non `[a-z0-9]` → `-`. **When the slug changes the code (Arabic, spaces, symbols) append the first 8 hex of sha256(code)**, or Arabic codes all collapse to one handle (`bc-cat-x` "already exists" was a real failure). |
-| Ownership | The middleware owns only products whose handle is `productHandle(metadata.bc_item_number)`. A SKU already used by another product → item skipped and reported, never overwritten. |
-| Gone from BC | An owned product whose item BC no longer returns (deleted or blocked) → status **rejected**; back to **draft** if it returns. An empty item list from BC rejects nothing (treated as a fault). |
+| Ownership | The middleware updates only products whose handle is `productHandle(metadata.bc_item_number)`. A SKU already used by another product → item skipped and reported, never overwritten. |
+| Not in BC → draft | **Every** Medusa product not in BC becomes a draft (owner's decision, 2026-10-29), whoever created it: demo, Salla, or a sync product whose item was deleted or blocked. In BC = made by the sync for an item BC returns, or any variant SKU BC has. Drafts are left alone. An empty BC item list changes nothing. Pages through `/admin/products` ordered by `id` (many products share a `created_at`, and a tie reorders between pages). |
 | Price lists | Only Status Active, Price Type Sale. Lists VAT-inclusive for another VAT Bus. Posting Group are skipped. Lines: skip Discount amount type, other units of measure, items/variants not imported. Blank variant code = all variants. Minimum Quantity > 1 → `min_quantity`. Date `0001-01-01` = none. Matched by `metadata.bc_price_list_code`; a list BC no longer offers → draft. |
 | Idempotent | Re-running updates, never duplicates. Variant ids are kept (orders reference them). |
 | Metadata | Product/variant: `bc_item_id`, `bc_item_number`, unit of measure, GTIN, posting groups, last modified. |
 
-### 6.2 Inventory sync (BC → Medusa)
+### 6.2 Inventory sync (BC → Medusa) — `src/sync/inventory.js`
 
 - Source: published **Item Ledger Entries** (page 38). Stock per location = sum of `Remaining_Quantity`
   of open entries (or `Quantity` over all entries if the page lacks Remaining Quantity).
 - **Read the page's columns first** (`$top=1`), then `$select`/`$filter` only those. Hoven's page has
   **no `Variant_Code`** and BC answers 400 to a query naming it. Without it, stock goes to the item's
   own SKU and the run reports that variants get 0.
-- For each owned variant and each mapped location: set the Medusa inventory level's
-  `stocked_quantity` to BC's number; none in BC → 0; negative → 0 and reported.
-- A variant without an inventory item gets one (same SKU), linked, and `manage_inventory` on.
-  Medusa does not create it when `manage_inventory` is switched on later.
-- Locations not mapped and products not owned are never touched. A mapped Medusa location with no
-  sales channel is reported (its stock cannot be sold).
-- **Complete or fail:** every BC list is read to the end of `@odata.nextLink`. Past the page cap
-  (1000) the run fails; a short list would read as "zero stock".
+- Target: **every Medusa variant whose SKU BC has** (item number, or number-variant code), in **every
+  mapped** stock location. None in BC → 0; negative → 0 and reported.
+- A variant without an inventory item gets one (an unlinked item with the same SKU is reused),
+  linked via `/admin/products/:id/variants/inventory-items/batch`, then `manage_inventory` on.
+- Levels via `/admin/inventory-items/location-levels/batch` (create + update), only where changed.
+- Unmapped locations and variants BC does not have are never touched. A mapped location with no
+  sales channel is reported.
+- **Complete or fail:** every BC list is read to the end of `@odata.nextLink`.
 
 ### 6.3 Mappings
 
@@ -180,8 +180,8 @@ clears both mappings (they name another company's codes).
 
 ### 6.5 Runs and the admin page
 
-- Tabs: **Settings** (read-only status of §5, with "Check connection"), **Locations**,
-  **Payment methods**, **Item sync**, **Inventory sync**.
+- Tabs: **Settings** (status of §5, "Check connection", company, posting groups, page names),
+  **Locations**, **Payment methods**, **Item sync**, **Inventory sync**.
 - Each sync: "Preview" (counts + 2 raw rows per source, nothing written), "Run", and the last 10 runs
   with summary counts and issues (capped at 500 per run).
 - One run at a time across both kinds. A run older than 2 h is treated as dead.
@@ -257,7 +257,7 @@ No id map table is needed in phase 1: BC identity is carried in Medusa handles, 
 1. `GET /api/middleware/status?check=1` reports both sides connected with real tokens, and never
    prints a token.
 2. Item sync on a fake BC with Arabic and symbol codes creates distinct handles; a second run creates
-   nothing new; a blocked item's product becomes rejected and returns to draft.
+   nothing new; a product not in BC (any source) becomes draft.
 3. Inventory sync against a page without `Variant_Code`, split over two pages, sets the right
    quantities in every mapped location; a third run changes nothing.
 4. A product with a clashing SKU is never modified.

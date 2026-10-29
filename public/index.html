@@ -74,6 +74,7 @@
         <a href="#locations" data-tab="locations" data-testid="nav-locations">ربط المستودعات</a>
         <a href="#payments" data-tab="payments" data-testid="nav-payments">طرق الدفع</a>
         <a href="#items" data-tab="items" data-testid="nav-items">مزامنة الأصناف</a>
+        <a href="#inventory" data-tab="inventory" data-testid="nav-inventory">مزامنة المخزون</a>
       </nav>
     </div>
   </header>
@@ -118,14 +119,15 @@
       </div>
 
       <div class="panel" data-testid="posting-panel">
-        <h2>Posting groups وصفحات الأسعار</h2>
+        <h2>Posting groups وصفحات BC</h2>
         <div class="fields">
           <div><label for="vat_bus_posting_group"><bdi>Store VAT Bus. Post. Gr.</bdi></label><input id="vat_bus_posting_group" data-testid="vat-bus" placeholder="DOMESTIC"></div>
           <div><label for="gen_bus_posting_group"><bdi>Gen. Business Posting Group</bdi></label><input id="gen_bus_posting_group" data-testid="gen-bus" placeholder="DOMESTIC"></div>
           <div><label for="price_list_service"><bdi>Sales Price Lists (7016) web service</bdi></label><input id="price_list_service" data-testid="price-list-service"></div>
           <div><label for="price_list_line_service"><bdi>Price List Lines (7001) web service</bdi></label><input id="price_list_line_service" data-testid="price-list-line-service"></div>
+          <div><label for="inventory_service"><bdi>Item Ledger Entries (38) web service</bdi></label><input id="inventory_service" data-testid="inventory-service"></div>
         </div>
-        <p class="hint">مجموعة VAT تحدد قوائم الأسعار الشاملة للضريبة المقبولة للمتجر، والمجموعة العامة محفوظة للمستندات. أسماء الصفحات فارغة = الأسماء الظاهرة.</p>
+        <p class="hint">مجموعة VAT تحدد قوائم الأسعار الشاملة للضريبة المقبولة للمتجر، والمجموعة العامة محفوظة للمستندات. الصفحات تُنشر في BC من Web Services؛ الاسم الفارغ = الاسم الظاهر.</p>
         <div class="row" style="margin-top:12px"><button id="save-settings" data-testid="save-settings">حفظ</button></div>
         <div class="result" id="result-settings" data-testid="result-settings"></div>
       </div>
@@ -148,24 +150,46 @@
       </div>
     </section>
 
-    <!-- ===== Item sync ===== -->
+    <!-- ===== Syncs (run button + history, filled by the same code) ===== -->
     <section data-view="items" data-testid="view-items" hidden>
       <div class="panel">
         <h2>مزامنة الأصناف</h2>
         <p class="hint">
           تستورد من الشركة المختارة: الفئات، والأصناف غير المحظورة مع المتغيرات وسعر الوحدة، وقوائم أسعار البيع النشطة.
-          المنتجات الجديدة تُنشأ مسودة (draft). الإعادة تحدّث ولا تكرر. الصنف الذي حُذف من BC أو صار محظورًا يصير rejected، ويعود draft إن رجع.
-          الصنف الذي رقمه (SKU) مستعمل لمنتج آخر يُتخطى ويُذكر. تعمل في الخادم خطوة خطوة، ولا تحتاج بقاء الصفحة مفتوحة.
+          المنتجات الجديدة تُنشأ مسودة (draft)، والإعادة تحدّث ولا تكرر. <strong>أي منتج في Medusa غير موجود في BC</strong>
+          (لا هو من أصناف BC ولا رقم SKU لأي متغير فيه موجود في BC) <strong>يتحول إلى draft</strong>، أيًا كان مصدره.
+          الصنف الذي رقمه مستعمل لمنتج آخر لا يُعدَّل ويُذكر. تعمل في الخادم خطوة خطوة، ولا تحتاج بقاء الصفحة مفتوحة.
         </p>
         <div class="row" style="margin-top:12px">
-          <button id="run-items" data-testid="run-items">بدء المزامنة</button>
-          <span class="notice" id="items-notice" data-testid="items-notice"></span>
+          <button data-run="items" data-testid="run-items">بدء المزامنة</button>
+          <span class="notice" data-notice="items"></span>
         </div>
-        <div class="result" id="result-items" data-testid="result-items"></div>
+        <div class="result" data-result="items" data-testid="result-items"></div>
       </div>
       <div class="panel">
         <h2>السجل</h2>
-        <div id="runs" data-testid="runs"><p class="notice">لا يوجد تشغيل بعد.</p></div>
+        <div data-runs="items" data-testid="runs-items"><p class="notice">لا يوجد تشغيل بعد.</p></div>
+      </div>
+    </section>
+
+    <section data-view="inventory" data-testid="view-inventory" hidden>
+      <div class="panel">
+        <h2>مزامنة المخزون</h2>
+        <p class="hint">
+          تضع في كل مستودع Medusa <strong>مربوط</strong> (تبويب ربط المستودعات) كمية كل صنف كما هي في مستودع BC المقابل:
+          مجموع قيود «Item Ledger Entries» (صفحة 38 منشورة في Web Services). يشمل كل متغير في Medusa رقمه (SKU) موجود في BC.
+          ما لا رصيد له في BC يصير 0، والسالب يصير 0 مع ملاحظة. المستودعات غير المربوطة والمنتجات التي ليست في BC لا تُلمس.
+          المتغير الذي لا يتتبع مخزونًا يُنشأ له عنصر مخزون ويُفعَّل تتبعه.
+        </p>
+        <div class="row" style="margin-top:12px">
+          <button data-run="inventory" data-testid="run-inventory">بدء مزامنة المخزون</button>
+          <span class="notice" data-notice="inventory"></span>
+        </div>
+        <div class="result" data-result="inventory" data-testid="result-inventory"></div>
+      </div>
+      <div class="panel">
+        <h2>السجل</h2>
+        <div data-runs="inventory" data-testid="runs-inventory"><p class="notice">لا يوجد تشغيل بعد.</p></div>
       </div>
     </section>
   </main>
@@ -210,7 +234,7 @@
     addEventListener("hashchange", showTab);
 
     // ---- Settings tab ----
-    const FIELDS = ["vat_bus_posting_group", "gen_bus_posting_group", "price_list_service", "price_list_line_service"];
+    const FIELDS = ["vat_bus_posting_group", "gen_bus_posting_group", "price_list_service", "price_list_line_service", "inventory_service"];
     let saved = {};
     const renderEnv = (target, rows) => {
       $(target).innerHTML = rows.map((row) => `
@@ -243,6 +267,7 @@
         showSavedCompanyOption();
         $("price_list_service").placeholder = data.defaults.price_list_service;
         $("price_list_line_service").placeholder = data.defaults.price_list_line_service;
+        $("inventory_service").placeholder = data.defaults.inventory_service;
         showCompany();
       } catch (error) {
         if (!(error instanceof Locked)) show($("result-bc"), false, escape(`تعذّر قراءة الإعدادات: ${error.message}`));
@@ -350,60 +375,82 @@
     loaders.locations = loadMapping("locations");
     loaders.payments = loadMapping("payments");
 
-    // ---- Item sync tab ----
-    const SUMMARY = [
-      ["bc_categories", "فئات في BC"], ["categories_created", "فئات أُنشئت"], ["categories_updated", "فئات تغيّر اسمها"],
-      ["bc_items", "أصناف في BC (غير محظورة)"], ["bc_variants", "متغيرات في BC"],
-      ["products_created", "منتجات أُنشئت (draft)"], ["products_updated", "منتجات حُدّثت"], ["products_skipped", "أصناف تُخطيت"],
-      ["products_rejected", "منتجات صارت rejected"],
-      ["bc_price_lists", "قوائم أسعار في BC"], ["price_lists_created", "قوائم أُنشئت"], ["price_lists_updated", "قوائم حُدّثت"],
-      ["price_lists_deactivated", "قوائم أُوقفت"], ["price_list_prices", "أسعار في القوائم"], ["issues", "ملاحظات"],
-    ];
-    const STAGES = { read: "قراءة BC", categories: "الفئات", products: "المنتجات", reject: "المحذوفة من BC", priceListsRead: "قراءة قوائم الأسعار", variantIds: "ربط المتغيرات", priceLists: "قوائم الأسعار" };
+    // ---- Sync tabs (items, inventory): run button and history ----
+    const SYNCS = {
+      items: {
+        summary: [
+          ["bc_categories", "فئات في BC"], ["categories_created", "فئات أُنشئت"], ["categories_updated", "فئات تغيّر اسمها"],
+          ["bc_items", "أصناف في BC (غير محظورة)"], ["bc_variants", "متغيرات في BC"],
+          ["products_created", "منتجات أُنشئت (draft)"], ["products_updated", "منتجات حُدّثت"], ["products_skipped", "أصناف تُخطيت"],
+          ["products_drafted", "منتجات تحولت إلى draft (ليست في BC)"],
+          ["bc_price_lists", "قوائم أسعار في BC"], ["price_lists_created", "قوائم أُنشئت"], ["price_lists_updated", "قوائم حُدّثت"],
+          ["price_lists_deactivated", "قوائم أُوقفت"], ["price_list_prices", "أسعار في القوائم"], ["issues", "ملاحظات"],
+        ],
+        stages: { read: "قراءة BC", categories: "الفئات", products: "المنتجات", toDraft: "غير الموجودة في BC", priceListsRead: "قراءة قوائم الأسعار", variantIds: "ربط المتغيرات", priceLists: "قوائم الأسعار" },
+      },
+      inventory: {
+        summary: [
+          ["locations", "مستودعات مربوطة"], ["bc_skus", "أصناف في BC"], ["bc_entries", "قيود مخزون مقروءة"],
+          ["variants", "متغيرات Medusa موجودة في BC"], ["bc_skus_not_in_medusa", "أصناف BC غير موجودة في Medusa"],
+          ["inventory_items_created", "عناصر مخزون أُنشئت"], ["levels_created", "أرصدة مستودعات أُنشئت"],
+          ["levels_updated", "أرصدة تغيّرت"], ["levels_unchanged", "أرصدة بلا تغيير"], ["issues", "ملاحظات"],
+        ],
+        stages: { read: "قراءة BC", variants: "مطابقة المتغيرات", track: "عناصر المخزون", levels: "الأرصدة" },
+      },
+    };
     const STATUS = { running: ["جارٍ", "warn"], succeeded: ["نجحت", "ok"], failed: ["فشلت", "err"] };
-    let polling = null;
-    const renderRuns = (runs) => {
-      if (!runs.length) { $("runs").innerHTML = `<p class="notice">لا يوجد تشغيل بعد.</p>`; return; }
-      $("runs").innerHTML = runs.map((run, index) => {
+    const polling = {};
+    const renderRuns = (kind, runs) => {
+      const box = document.querySelector(`[data-runs="${kind}"]`);
+      if (!runs.length) { box.innerHTML = `<p class="notice">لا يوجد تشغيل بعد.</p>`; return; }
+      const { summary: labels, stages } = SYNCS[kind];
+      box.innerHTML = runs.map((run, index) => {
         const [text, cls] = STATUS[run.status] ?? [run.status, ""];
-        const summary = index === 0 ? SUMMARY.filter(([k]) => run.summary[k] !== undefined)
+        const summary = index === 0 ? labels.filter(([k]) => run.summary[k] !== undefined)
           .map(([k, l]) => `<tr><td>${l}</td><td>${escape(run.summary[k])}</td></tr>`).join("") : "";
         const issues = index === 0 && run.issues.length ? `<details><summary>الملاحظات (${run.issues.length})</summary><ul>${run.issues
           .map((i) => `<li><span class="mono">${escape(i.ref)}</span>: <bdi>${escape(i.message)}</bdi></li>`).join("")}</ul></details>` : "";
-        return `<div class="run" ${index === 0 ? 'data-testid="last-run"' : ""}>
-          <div class="row"><span class="state ${cls}">${text}${run.status === "running" ? ` — ${STAGES[run.stage] ?? run.stage}` : ""}</span>
+        return `<div class="run" ${index === 0 ? `data-testid="last-run-${kind}"` : ""}>
+          <div class="row"><span class="state ${cls}">${text}${run.status === "running" ? ` — ${stages[run.stage] ?? run.stage}` : ""}</span>
           <span class="notice">${new Date(run.started_at).toLocaleString("ar-SA-u-nu-latn")}</span></div>
           ${run.error ? `<p class="error"><bdi>${escape(run.error)}</bdi></p>` : ""}
           ${summary ? `<table class="summary">${summary}</table>` : ""}${issues}</div>`;
       }).join("");
     };
-    const loadRuns = async () => {
+    const loadRuns = (kind) => async () => {
+      const button = document.querySelector(`[data-run="${kind}"]`);
       try {
-        const { runs } = await api("items/runs");
-        renderRuns(runs);
+        const { runs } = await api(`${kind}/runs`);
+        renderRuns(kind, runs);
         const running = runs.some((r) => r.status === "running");
-        $("run-items").disabled = running;
-        clearTimeout(polling);
-        if (running && !document.querySelector('[data-view="items"]').hidden) polling = setTimeout(loadRuns, 2000);
+        button.disabled = running;
+        clearTimeout(polling[kind]);
+        if (running && !document.querySelector(`[data-view="${kind}"]`).hidden) polling[kind] = setTimeout(loadRuns(kind), 2000);
       } catch (error) {
-        if (!(error instanceof Locked)) show($("result-items"), false, escape(error.message));
+        if (!(error instanceof Locked)) show(document.querySelector(`[data-result="${kind}"]`), false, escape(error.message));
       }
     };
-    loaders.items = async () => {
-      $("items-notice").textContent = saved.company_id ? `الشركة: ${saved.company_display_name || saved.company_name}` : "اختر الشركة في الإعدادات أولًا.";
-      loadRuns();
-    };
-    $("run-items").addEventListener("click", async () => {
-      $("run-items").disabled = true;
-      try {
-        await api("items/run", {});
-        $("result-items").className = "result";
-        loadRuns();
-      } catch (error) {
-        show($("result-items"), false, escape(error.message));
-        $("run-items").disabled = false;
-      }
-    });
+    for (const kind of Object.keys(SYNCS)) {
+      const button = document.querySelector(`[data-run="${kind}"]`);
+      const result = document.querySelector(`[data-result="${kind}"]`);
+      loaders[kind] = () => {
+        document.querySelector(`[data-notice="${kind}"]`).textContent = saved.company_id
+          ? `الشركة: ${saved.company_display_name || saved.company_name}`
+          : "اختر الشركة في الإعدادات أولًا.";
+        loadRuns(kind)();
+      };
+      button.addEventListener("click", async () => {
+        button.disabled = true;
+        try {
+          await api(`${kind}/run`, {});
+          result.className = "result";
+          loadRuns(kind)();
+        } catch (error) {
+          show(result, false, escape(error.message));
+          button.disabled = false;
+        }
+      });
+    }
 
     loadSettings().then(showTab);
   </script>

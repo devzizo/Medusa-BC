@@ -1,6 +1,6 @@
 import { bcCredentials, listBcItemCategories, listBcItems, listBcItemVariants, listBcODataRows } from "../lib/bc.js";
 import { makeBudget, medusaClient } from "../lib/medusa.js";
-import { mapCategories, mapItems, mapPriceLists, productHandle } from "../lib/map.js";
+import { mapCategories, mapItems, mapPriceLists } from "../lib/map.js";
 
 // The item sync, BC → Medusa: categories, items that are not blocked (with
 // their variants and unit price), and active sales price lists, the same
@@ -9,8 +9,9 @@ import { mapCategories, mapItems, mapPriceLists, productHandle } from "../lib/ma
 // each step does what fits in BUDGET calls, saves where it stopped in the
 // Durable Object, and the next alarm carries on.
 //
-// It owns only what it created: a product whose handle is the one it gives
-// that item number. A SKU already used by another product skips the item.
+// It updates only what it created: a product whose handle is the one it
+// gives that item number; a SKU already used by another product skips the
+// item. Every Medusa product not in BC, whoever created it, becomes a draft.
 
 const BUDGET = 40;
 const PRODUCT_FIELDS =
@@ -26,7 +27,7 @@ export async function runItemSyncStep(ctx, env) {
   const medusa = medusaClient(env, budget);
   const bc = bcCredentials(env);
   const { state } = ctx;
-  const stages = { read, categories, products, reject, priceListsRead, variantIds, priceLists };
+  const stages = { read, categories, products, toDraft, priceListsRead, variantIds, priceLists };
   // Stages run back to back within one step while the budget lasts.
   while (state.stage !== "done" && budget.left() > 5) {
     const before = `${state.stage}:${state.cursor}`;
@@ -116,7 +117,7 @@ const productCost = (product, current) => (current ? 3 + product.variants.length
 async function products({ ctx, medusa, budget }) {
   const { state, summary } = ctx;
   const rows = ctx.work("product", state.cursor, 5);
-  if (!rows.length) return next(state, "reject");
+  if (!rows.length) return next(state, "toDraft");
   if (budget.left() < 8) return;
 
   const categoryIds = new Map(ctx.work("category").filter((row) => row.result).map((row) => [row.key, row.result.id]));
@@ -195,7 +196,7 @@ async function updateProduct(ctx, medusa, product, current, categoryId) {
     subtitle: product.subtitle ?? null,
     metadata: product.metadata,
     ...(categoryId ? { categories: [{ id: categoryId }] } : {}),
-    // Back in BC after being rejected: a draft again, for an admin to publish.
+    // Rejected by an older run: back in BC, it is a draft for an admin to publish.
     ...(current.status === "rejected" ? { status: "draft" } : {}),
   });
   const idBySku = new Map(current.variants.map((variant) => [variant.sku, variant.id]));
@@ -242,31 +243,44 @@ async function updateProduct(ctx, medusa, product, current, categoryId) {
   }
 }
 
-// ---- reject: ours, but BC no longer has the item ----
+// ---- toDraft: anything in Medusa that BC does not have ----
 
-async function reject({ ctx, medusa, budget }) {
+// The owner's rule: every Medusa product that is not in BC becomes a draft,
+// whoever created it (the item sync, the demo seed, a Salla import). A
+// product is in BC when the item sync made it for an item BC still has, or
+// when any of its variants carries a SKU BC has. Drafts are left as they are.
+async function toDraft({ ctx, medusa, budget }) {
   const { state, summary } = ctx;
-  const inBc = new Set(ctx.work("product").map((row) => row.key));
-  if (!inBc.size) {
-    ctx.note({ kind: "product", ref: "-", message: "Business Central returned no items; nothing was rejected." });
+  const products = ctx.work("product");
+  if (!products.length) {
+    ctx.note({ kind: "product", ref: "-", message: "Business Central returned no items; no product was changed to draft." });
     return next(state, "priceListsRead");
   }
-  summary.products_rejected ??= 0;
+  const inBcHandles = new Set(products.map((row) => row.key));
+  const inBcSkus = new Set(products.flatMap((row) => row.payload.variants.map((v) => v.sku)));
+  summary.products_drafted ??= 0;
   while (budget.left() > 3) {
-    const { products: page, count } = await medusa.get("/admin/products", { limit: 100, offset: state.cursor, fields: "id,handle,status,metadata" });
-    const missing = page.filter((product) => {
-      const itemNumber = product.metadata?.bc_item_number;
-      const owned = typeof itemNumber === "string" && productHandle(itemNumber) === product.handle;
-      return owned && !inBc.has(product.handle) && product.status !== "rejected";
+    const { products: page, count } = await medusa.get("/admin/products", {
+      limit: 100,
+      offset: state.cursor,
+      fields: "id,handle,title,status,variants.sku",
+      // A unique key: many products share a created_at, and a tie reorders between pages.
+      order: "id",
     });
-    if (missing.length) {
-      await medusa.post("/admin/products/batch", { update: missing.map((product) => ({ id: product.id, status: "rejected" })) });
-      missing.forEach((product) =>
-        ctx.note({ kind: "rejected", ref: product.handle, message: "No longer in Business Central (deleted or blocked); set to rejected." }),
+    const gone = page.filter(
+      (product) =>
+        product.status !== "draft" &&
+        !inBcHandles.has(product.handle) &&
+        !(product.variants ?? []).some((variant) => variant.sku && inBcSkus.has(variant.sku)),
+    );
+    if (gone.length) {
+      await medusa.post("/admin/products/batch", { update: gone.map((product) => ({ id: product.id, status: "draft" })) });
+      gone.forEach((product) =>
+        ctx.note({ kind: "draft", ref: product.handle, message: `"${product.title}" is not in Business Central; changed from ${product.status} to draft.` }),
       );
-      summary.products_rejected += missing.length;
+      summary.products_drafted += gone.length;
     }
-    // Rejecting does not remove a product from the list, so offsets hold.
+    // Changing the status does not remove a product from the list, so offsets hold.
     state.cursor += page.length;
     if (!page.length || state.cursor >= count) return next(state, "priceListsRead");
   }

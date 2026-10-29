@@ -1,9 +1,13 @@
 import { DurableObject } from "cloudflare:workers";
+import { runInventorySyncStep } from "./sync/inventory.js";
 import { runItemSyncStep } from "./sync/items.js";
+
+const STEPS = { items: runItemSyncStep, inventory: runInventorySyncStep };
 
 // All of the middleware's own state, in one Durable Object with SQLite:
 // settings chosen in the page (company, posting groups), the location and
-// payment method mappings, and the item sync runs with their work queue.
+// payment method mappings, and the sync runs (items, inventory) with their
+// work queue. Only one run of either kind goes at a time.
 // One instance (named "main") serves everything, so reads are consistent.
 
 const MAX_ISSUES = 500;
@@ -20,6 +24,7 @@ export const SETTING_KEYS = [
   "gen_bus_posting_group",
   "price_list_service",
   "price_list_line_service",
+  "inventory_service",
 ];
 
 const MAPPINGS = {
@@ -172,6 +177,7 @@ export class MiddlewareStore extends DurableObject {
       },
       save,
       settings: this.getSettings(),
+      mappings: (kind) => this.getMappings(kind, this.getSettings().company_id),
       putWork: (kind, items) => {
         items.forEach((item, seq) =>
           this.sql.exec("INSERT INTO work (run_id, kind, seq, key, payload) VALUES (?, ?, ?, ?, ?)", id, kind, seq, item.key, JSON.stringify(item.payload)),
@@ -191,7 +197,7 @@ export class MiddlewareStore extends DurableObject {
     if (!run) return;
     const context = this.runContext(run.id);
     try {
-      const done = await runItemSyncStep(context, this.env);
+      const done = await STEPS[run.kind](context, this.env);
       context.save();
       if (done) this.finish(run.id, "succeeded");
       else await this.ctx.storage.setAlarm(Date.now() + STEP_DELAY_MS);

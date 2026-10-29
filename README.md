@@ -5,7 +5,7 @@ Cloudflare Workers. It syncs Business Central into Medusa from outside Medusa.
 
 Live: https://medusa-bc.dev-zizo.workers.dev
 
-The admin page (`public/index.html`, Arabic, RTL) has four tabs, the same tools the in-Medusa plugin had:
+The admin page (`public/index.html`, Arabic, RTL) has five tabs, the same tools the in-Medusa plugin had:
 
 1. **الإعدادات (Settings)** — connection checks for Business Central and Medusa, the BC company
    (chosen from BC's own list; changing it clears both mappings), the posting groups (Store VAT Bus.
@@ -13,17 +13,23 @@ The admin page (`public/index.html`, Arabic, RTL) has four tabs, the same tools 
 2. **ربط المستودعات (Locations)** — each Medusa stock location → one BC location.
 3. **طرق الدفع (Payment methods)** — each Medusa payment provider → one BC payment method.
 4. **مزامنة الأصناف (Item sync)** — categories, non-blocked items with variants and unit price, and
-   active sales price lists, BC → Medusa. New products are drafts; a product whose item left BC is
-   rejected (and back to draft if it returns); a clashing SKU is skipped. Runs on the server.
+   active sales price lists, BC → Medusa. New products are drafts; a clashing SKU is skipped. **Every
+   Medusa product that is not in BC becomes a draft**, whoever created it (in BC = made by the sync for
+   an item BC still has, or any variant SKU BC has).
+5. **مزامنة المخزون (Inventory sync)** — for every Medusa variant whose SKU BC has, and every
+   **mapped** stock location, the stocked quantity becomes the BC location's stock (Item Ledger
+   Entries, page 38). None in BC → 0. Unmapped locations and products not in BC are not touched.
 
 Code:
 
 - `src/index.js` — serves the page, routes `/api/middleware/*`, exports the Durable Object.
 - `src/api.js` — the API behind the page.
 - `src/store.js` — Durable Object `MiddlewareStore` (SQLite): settings, mappings, sync runs.
-- `src/sync/items.js` — the item sync, as steps under a subrequest budget driven by alarms.
+- `src/sync/items.js`, `src/sync/inventory.js` — the two syncs, as steps under a subrequest budget
+  driven by alarms.
 - `src/lib/bc.js`, `src/lib/medusa.js`, `src/lib/map.js` — BC client, Medusa Admin client, the pure
-  mapping rules (ported from the plugin, tested in `test/`: `npm test`).
+  mapping rules; `src/lib/inventory.js` the stock arithmetic (both ported from the plugin, tested
+  in `test/`: `npm test`).
 - `docs/PRD.md` — the full spec. `.claude/skills/medusa-bc-middleware/SKILL.md` — how to work on it.
 
 Never put the Medusa secret `sk_` key, the BC client secret or the middleware token in this repo.
@@ -73,7 +79,7 @@ secret is set, in which case every call needs `Authorization: Bearer <token>` an
 | `POST /api/middleware/company` | `{ company_id }` from BC's list; clears both mappings when it changes. |
 | `POST /api/middleware/settings` | Posting groups and price list service names. |
 | `GET/POST /api/middleware/mappings/{locations,payments}` | Both lists live, and the saved mapping; POST `{ mappings: [{ id, code }] }`. |
-| `GET /api/middleware/items/runs`, `POST /api/middleware/items/run` | Item sync history; start a run. |
+| `GET /api/middleware/{items,inventory}/runs`, `POST …/run` | Sync history; start a run (one at a time). |
 
 ## Deploy
 
