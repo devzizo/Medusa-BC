@@ -57,9 +57,12 @@ async function read({ ctx, medusa, bc, budget }) {
   const { state, summary, settings } = ctx;
   if (!settings.company_id) throw new Error("Choose a Business Central company in Settings first.");
   const options = { budget };
+  // Options from Settings; unset means on.
+  const importBlocked = settings.skip_blocked === "0";
+  const draftZeroInventory = settings.draft_zero_inventory !== "0";
   const [bcCategories, bcItems, bcVariants] = await Promise.all([
     listBcItemCategories(bc, settings.company_id, options),
-    listBcItems(bc, settings.company_id, options),
+    listBcItems(bc, settings.company_id, options, { includeBlocked: importBlocked }),
     listBcItemVariants(bc, settings.company_id, options),
   ]);
   summary.bc_categories = bcCategories.length;
@@ -73,7 +76,7 @@ async function read({ ctx, medusa, bc, budget }) {
   const { sales_channels } = await medusa.get("/admin/sales-channels", { limit: 1, fields: "id" });
   const { shipping_profiles } = await medusa.get("/admin/shipping-profiles", { type: "default", limit: 1, fields: "id" });
 
-  const mapped = mapItems(bcItems, bcVariants, currency.toLowerCase());
+  const mapped = mapItems(bcItems, bcVariants, currency.toLowerCase(), { draftZeroInventory });
   mapped.issues.forEach(ctx.note);
   ctx.putWork("category", mapCategories(bcCategories).map((category) => ({ key: category.handle, payload: category })));
   ctx.putWork("product", mapped.products.map((product) => ({ key: product.handle, payload: product })));
@@ -82,7 +85,15 @@ async function read({ ctx, medusa, bc, budget }) {
     sales_channel_id: sales_channels?.[0]?.id ?? null,
     shipping_profile_id: shipping_profiles?.[0]?.id ?? null,
   };
-  Object.assign(summary, { categories_created: 0, categories_updated: 0, products_created: 0, products_updated: 0, products_skipped: 0 });
+  Object.assign(summary, {
+    categories_created: 0,
+    categories_updated: 0,
+    products_created: 0,
+    products_updated: 0,
+    products_skipped: 0,
+    products_drafted_blocked: 0,
+    products_drafted_zero_inventory: 0,
+  });
   next(state, "categories");
 }
 
@@ -163,7 +174,7 @@ async function products({ ctx, medusa, budget }) {
     const categoryId = product.category_handle ? categoryIds.get(product.category_handle) : undefined;
     try {
       if (!current) {
-        const { category_handle, ...body } = product;
+        const { category_handle, draft_reason, ...body } = product;
         await medusa.post("/admin/products", {
           ...body,
           status: "draft",
@@ -175,6 +186,14 @@ async function products({ ctx, medusa, budget }) {
         summary.products_created++;
       } else {
         await updateProduct(ctx, medusa, product, current, categoryId);
+        if (product.draft_reason && current.status !== "draft") {
+          summary[`products_drafted_${product.draft_reason}`]++;
+          ctx.note({
+            kind: "draft",
+            ref: product.handle,
+            message: product.draft_reason === "blocked" ? "Blocked in Business Central; changed to draft." : "No stock in Business Central; changed to draft.",
+          });
+        }
         ctx.setResult("product", row.seq, { status: "updated" });
         summary.products_updated++;
       }
@@ -216,8 +235,10 @@ async function updateProduct(ctx, medusa, product, current, categoryId) {
     subtitle: product.subtitle ?? null,
     metadata: product.metadata,
     ...(categoryId ? { categories: [{ id: categoryId }] } : {}),
-    // Rejected by an older run: back in BC, it is a draft for an admin to publish.
-    ...(current.status === "rejected" ? { status: "draft" } : {}),
+    // Blocked or out of stock in BC (per the options): a draft. Rejected by an
+    // older run: back in BC, a draft for an admin to publish. Otherwise the
+    // status is the admin's and stays as it is.
+    ...(product.draft_reason || current.status === "rejected" ? { status: "draft" } : {}),
   });
   const idBySku = new Map(current.variants.map((variant) => [variant.sku, variant.id]));
   for (const variant of product.variants) {
@@ -265,10 +286,10 @@ async function updateProduct(ctx, medusa, product, current, categoryId) {
 
 // ---- toDraft: anything in Medusa that BC does not have ----
 
-// The owner's rule: every Medusa product that is not in BC becomes a draft,
-// whoever created it (the item sync, the demo seed, a Salla import). A
-// product is in BC when the item sync made it for an item BC still has, or
-// when any of its variants carries a SKU BC has. Drafts are left as they are.
+// The owner's rule, BC being the origin: every Medusa product whose handle
+// matches no BC item becomes a draft, whoever created it (the demo seed, a
+// Salla import, an item since deleted or blocked in BC). Only the handle
+// counts, not SKUs. Drafts are left as they are.
 async function toDraft({ ctx, medusa, budget }) {
   const { state, summary } = ctx;
   const products = ctx.work("product");
@@ -277,22 +298,16 @@ async function toDraft({ ctx, medusa, budget }) {
     return next(state, "priceListsRead");
   }
   const inBcHandles = new Set(products.map((row) => row.key));
-  const inBcSkus = new Set(products.flatMap((row) => row.payload.variants.map((v) => v.sku)));
   summary.products_drafted ??= 0;
   while (budget.left() > 3) {
     const { products: page, count } = await medusa.get("/admin/products", {
       limit: 100,
       offset: state.cursor,
-      fields: "id,handle,title,status,variants.sku",
+      fields: "id,handle,title,status",
       // A unique key: many products share a created_at, and a tie reorders between pages.
       order: "id",
     });
-    const gone = page.filter(
-      (product) =>
-        product.status !== "draft" &&
-        !inBcHandles.has(product.handle) &&
-        !(product.variants ?? []).some((variant) => variant.sku && inBcSkus.has(variant.sku)),
-    );
+    const gone = page.filter((product) => product.status !== "draft" && !inBcHandles.has(product.handle));
     if (gone.length) {
       await medusa.post("/admin/products/batch", { update: gone.map((product) => ({ id: product.id, status: "draft" })) });
       gone.forEach((product) =>

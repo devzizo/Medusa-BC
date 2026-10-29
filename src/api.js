@@ -40,7 +40,15 @@ const MAPPINGS = {
   },
 };
 
-const PUBLIC_SETTINGS = ["vat_bus_posting_group", "gen_bus_posting_group", "price_list_service", "price_list_line_service", "inventory_service"];
+const PUBLIC_SETTINGS = [
+  "vat_bus_posting_group",
+  "gen_bus_posting_group",
+  "price_list_service",
+  "price_list_line_service",
+  "inventory_service",
+  "skip_blocked",
+  "draft_zero_inventory",
+];
 
 export async function middlewareApi(request, env, pathname) {
   if (!isAuthorized(request, env)) return fail("Unauthorized", 401);

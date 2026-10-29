@@ -166,3 +166,15 @@ describe("mapPriceLists", () => {
     expect(issues.map((issue) => issue.ref)).toEqual(["S00001/2000", "S00001/9999", "S00001/1000"])
   })
 })
+
+describe("draftReason", async () => {
+  const { draftReason } = await import("../src/lib/map.js");
+  it("drafts blocked items, and zero stock only when the option is on and BC gives a figure", () => {
+    expect(draftReason({ blocked: true, inventory: 5 })).toBe("blocked");
+    expect(draftReason({ inventory: 0 }, { draftZeroInventory: true })).toBe("zero_inventory");
+    expect(draftReason({ inventory: -2 }, { draftZeroInventory: true })).toBe("zero_inventory");
+    expect(draftReason({ inventory: 0 }, { draftZeroInventory: false })).toBe(null);
+    expect(draftReason({ inventory: 3 }, { draftZeroInventory: true })).toBe(null);
+    expect(draftReason({}, { draftZeroInventory: true })).toBe(null);
+  });
+});

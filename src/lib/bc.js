@@ -130,11 +130,16 @@ export const listBcPaymentMethods = async (credentials, companyId, options) =>
 export const listBcItemCategories = (credentials, companyId, options) =>
   bcGetAll(credentials, `${companyPath(companyId)}/itemCategories`, options);
 
-/** Items that are not blocked, checked again here in case BC ignores the filter. */
-export const listBcItems = async (credentials, companyId, options) =>
-  (await bcGetAll(credentials, `${companyPath(companyId)}/items?$filter=${encodeURIComponent("blocked eq false")}`, options)).filter(
-    (item) => item.blocked !== true,
-  );
+/**
+ * Items that are not blocked (checked again here in case BC ignores the
+ * filter), or every item when `includeBlocked` is set.
+ */
+export const listBcItems = async (credentials, companyId, options, { includeBlocked = false } = {}) =>
+  includeBlocked
+    ? bcGetAll(credentials, `${companyPath(companyId)}/items`, options)
+    : (await bcGetAll(credentials, `${companyPath(companyId)}/items?$filter=${encodeURIComponent("blocked eq false")}`, options)).filter(
+        (item) => item.blocked !== true,
+      );
 
 export const listBcItemVariants = (credentials, companyId, options) =>
   bcGetAll(credentials, `${companyPath(companyId)}/itemVariants`, options);

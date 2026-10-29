@@ -15,8 +15,8 @@ The admin page (`public/index.html`, Arabic, RTL) has five tabs, the same tools 
 4. **مزامنة الأصناف (Item sync)**, with two sub-tabs. **الفئات (Categories)** pulls BC's item categories
    into Medusa alone (create, rename, never duplicate). **المنتجات (Products)** is the full sync: categories, non-blocked items with variants and unit price, and
    active sales price lists, BC → Medusa. New products are drafts; a clashing SKU is skipped. **Every
-   Medusa product that is not in BC becomes a draft**, whoever created it (in BC = made by the sync for
-   an item BC still has, or any variant SKU BC has).
+   Medusa product whose handle matches no BC item becomes a draft**, whoever created it (BC is the
+   origin). Options in Settings: blocked items not imported; zero stock in BC → draft.
 5. **مزامنة المخزون (Inventory sync)** — for every Medusa variant whose SKU BC has, and every
    **mapped** stock location, the stocked quantity becomes the BC location's stock (Item Ledger
    Entries, page 38). None in BC → 0. Unmapped locations and products not in BC are not touched.

@@ -38,7 +38,7 @@ It replaces the in-Medusa plugin `@hoven/medusa-bc` (repo `devzizo/essentials-st
 
 1. **BC is the source of truth; the middleware updates only what it created.** Owned product = handle
    `productHandle(metadata.bc_item_number)`. Never modify a product whose SKU clashes: skip and report.
-   (Exceptions by design: the draft rule (7) and stock (by SKU) reach every Medusa product.)
+   (Exceptions by design: the draft rule (7, by handle) and stock (by SKU) reach every Medusa product.)
 2. **Complete or fail.** Follow `@odata.nextLink` to the end; past the page cap throw. A short list
    reads as "not in BC" (→ draft) or "zero stock".
 3. **Handles are stable and unique.** Slug the code; if the slug changed it (Arabic, spaces, symbols),
@@ -49,9 +49,10 @@ It replaces the in-Medusa plugin `@hoven/medusa-bc` (repo `devzizo/essentials-st
 6. **Medusa 2.19:** options are shared; never pass `options`/`variants` in a product update. Prices in
    the major unit (SAR), never ×100. `manage_inventory: true` set later creates no inventory item:
    create it, link it, then switch it on.
-7. **Not in BC → draft, for every Medusa product** (owner's decision): in BC = made by the sync for an item
-   BC returns, or any variant SKU BC has. An empty BC item list changes nothing. Page Medusa lists by
-   `id`, never `created_at` (ties reorder between pages and products get skipped).
+7. **Not in BC → draft, for every Medusa product, by handle only** (owner's decision, BC is the origin).
+   Options: blocked items not imported (or imported as drafts), zero stock in BC (`item.inventory`) →
+   draft. An empty BC item list changes nothing. Page Medusa lists by `id`, never `created_at` (ties
+   reorder between pages and products get skipped).
 8. **One run at a time** across item and inventory syncs; a run older than 2 h is dead, mark it failed.
 9. Mappings name one BC company's codes: a company change clears them.
 10. **Every step stays under the subrequest budget** (`SYNC_STEP_BUDGET`, default 40; the free plan

@@ -25,6 +25,9 @@ export const SETTING_KEYS = [
   "price_list_service",
   "price_list_line_service",
   "inventory_service",
+  // Item sync options, "0" = off (unset = on).
+  "skip_blocked",
+  "draft_zero_inventory",
 ];
 
 const MAPPINGS = {

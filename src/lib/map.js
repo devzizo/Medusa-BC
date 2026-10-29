@@ -42,11 +42,23 @@ export const mapCategories = (categories) =>
     }));
 
 /**
+ * Why an item's product must be a draft, or null: blocked in BC (when
+ * blocked items are imported at all), or no stock in BC when that option is
+ * on. `inventory` is the item's total over every BC location; an item BC
+ * reports no figure for is never drafted for stock.
+ */
+export const draftReason = (item, { draftZeroInventory = false } = {}) => {
+  if (item.blocked === true) return "blocked";
+  if (draftZeroInventory && typeof item.inventory === "number" && item.inventory <= 0) return "zero_inventory";
+  return null;
+};
+
+/**
  * One product per item, one variant per BC item variant (or a single default
  * variant when the item has none). The item's unit price is every variant's
  * "original" price; price lists override it.
  */
-export const mapItems = (items, variants, currencyCode) => {
+export const mapItems = (items, variants, currencyCode, options = {}) => {
   const issues = [];
   const variantsByItem = new Map();
   for (const variant of variants) {
@@ -103,6 +115,7 @@ export const mapItems = (items, variants, currencyCode) => {
           : [{ title: DEFAULT_OPTION.title, values: [DEFAULT_OPTION.value] }],
         variants: productVariants,
         category_handle: item.itemCategoryCode ? categoryHandle(item.itemCategoryCode) : null,
+        draft_reason: draftReason(item, options),
         metadata: {
           ...shared,
           bc_type: item.type,
@@ -114,6 +127,8 @@ export const mapItems = (items, variants, currencyCode) => {
           bc_gen_prod_posting_group: item.generalProductPostingGroupCode || undefined,
           bc_inventory_posting_group: item.inventoryPostingGroupCode || undefined,
           bc_last_modified: item.lastModifiedDateTime,
+          bc_inventory: item.inventory,
+          bc_blocked: item.blocked === true ? true : undefined,
         },
       }),
     );
