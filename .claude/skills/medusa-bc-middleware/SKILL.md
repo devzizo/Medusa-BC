@@ -1,6 +1,6 @@
 ---
 name: medusa-bc-middleware
-description: Build, extend or debug the Medusa ↔ Business Central middleware in this repo (a Cloudflare Worker that syncs BC items, prices, stock, customers, locations and payment methods into Medusa over its Admin API). Use for any work on item sync, inventory sync, customer sync, mappings, the token settings, or the BC/Medusa clients.
+description: Build, extend or debug the Medusa ↔ Business Central middleware in this repo (a Cloudflare Worker that syncs BC items, prices, stock, customers, locations and payment methods into Medusa over its Admin API, and posts Medusa orders to BC as sales orders). Use for any work on item sync, inventory sync, customer sync, mappings, the token settings, or the BC/Medusa clients.
 ---
 
 # Medusa ↔ Business Central middleware
@@ -64,6 +64,9 @@ It replaces the in-Medusa plugin `@hoven/medusa-bc` (repo `devzizo/essentials-st
     never take over or merge into a customer the sync did not create; leave the email out and report.
 13. **Pictures go through Medusa's file upload**, never as BC links (they need BC's token). Only owned
     products; keep images added in Medusa; skip by `bc_picture_etag`.
+14. **Orders go to BC by hand only** (Sync per order), as sales orders `MED-<n>`. Search BC (orders and
+    posted invoices) before creating; on any refused line delete the half-made order. Price lines after
+    the header exists: `pricesIncludeTax` comes from the BC customer.
 
 ## How to verify (before any deploy)
 

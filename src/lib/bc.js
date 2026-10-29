@@ -116,6 +116,33 @@ export async function bcGetBinary(credentials, pathOrUrl, options = {}) {
   return { bytes: await res.arrayBuffer(), contentType: res.headers.get("content-type") || "" };
 }
 
+/**
+ * POST, PATCH or DELETE on BC (relative path or absolute URL). PATCH and
+ * DELETE need an If-Match; "*" means whatever version is current.
+ */
+export async function bcSend(credentials, method, pathOrUrl, body, options = {}) {
+  const token = await bcToken(credentials, options);
+  options.budget?.use();
+  const url = /^https?:/i.test(pathOrUrl) ? pathOrUrl : `${bcApiRoot(credentials.url)}${pathOrUrl}`;
+  const res = await timed(url, {
+    method,
+    headers: {
+      authorization: `Bearer ${token}`,
+      accept: "application/json",
+      ...(body ? { "content-type": "application/json" } : {}),
+      ...(method === "POST" ? {} : { "if-match": "*" }),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const data = res.status === 204 ? {} : await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new BcError("http_error", `Business Central refused the request (HTTP ${res.status})${data.error?.message ? `: ${data.error.message}` : ""}`, res.status);
+  }
+  return data;
+}
+
+export const bcCompanyPath = (companyId) => `/companies(${encodeURIComponent(companyId)})`;
+
 /** Every row of a BC collection, following @odata.nextLink to the end. */
 export async function bcGetAll(credentials, path, options = {}) {
   const rows = [];

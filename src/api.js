@@ -3,6 +3,7 @@ import { mapPriceLists } from "./lib/map.js";
 import { medusaClient } from "./lib/medusa.js";
 import { checkBusinessCentral, checkMedusa, describeSettings, isAuthorized } from "./config.js";
 import { DEFAULT_INVENTORY_SERVICE } from "./sync/inventory.js";
+import { postOrder } from "./sync/orders.js";
 import { DEFAULT_PRICE_LIST_LINE_SERVICE, DEFAULT_PRICE_LIST_SERVICE } from "./sync/items.js";
 
 // The middleware API behind the admin page. Everything the page saves lives
@@ -13,6 +14,8 @@ import { DEFAULT_PRICE_LIST_LINE_SERVICE, DEFAULT_PRICE_LIST_SERVICE } from "./s
 //   POST /api/middleware/company                { company_id } chosen from BC's list
 //   POST /api/middleware/settings               posting groups and price list service names
 //   GET  /api/middleware/price-lists              BC's sales price lists, and which can be imported
+//   GET  /api/middleware/orders?offset=           Medusa orders, newest first, with what was posted to BC
+//   POST /api/middleware/orders/:id/sync          post one order to BC as a sales order (by hand)
 //   GET  /api/middleware/mappings/{locations,payments}
 //   POST /api/middleware/mappings/{locations,payments}   { mappings: [{ id, code|null }] }
 //   GET  /api/middleware/{items,categories,images,inventory,customers}/runs
@@ -49,6 +52,11 @@ const PUBLIC_SETTINGS = [
   "price_list_line_service",
   "inventory_service",
   "price_lists",
+  "order_customer_number",
+  "order_shipping_type",
+  "order_shipping_number",
+  "order_location_code",
+  "order_local_currency",
   "skip_blocked",
   "draft_zero_inventory",
 ];
@@ -114,6 +122,26 @@ export async function middlewareApi(request, env, pathname) {
           reason: reasons.get(h.Code) ?? null,
         })),
     });
+  }
+
+  if (pathname === "/api/middleware/orders" && method === "GET") {
+    const offset = Math.max(0, Number(new URL(request.url).searchParams.get("offset")) || 0);
+    const data = await medusaClient(env)
+      .get("/admin/orders", {
+        fields: "id,display_id,created_at,email,currency_code,total,status,payment_status,fulfillment_status,customer.first_name,customer.last_name,customer.company_name,customer.metadata,shipping_address.first_name,shipping_address.last_name",
+        order: "-created_at",
+        limit: 20,
+        offset,
+      })
+      .catch((error) => error);
+    if (data instanceof Error) return fail(errorMessage(data), 502);
+    const records = new Map((await db.orderRecords(data.orders.map((o) => o.id))).map((r) => [r.order_id, r]));
+    return json({ count: data.count, offset, limit: 20, orders: data.orders.map((o) => ({ ...o, bc: records.get(o.id) ?? null })) });
+  }
+  const orderSync = pathname.match(/^\/api\/middleware\/orders\/([^/]+)\/sync$/);
+  if (orderSync && method === "POST") {
+    const result = await postOrder(env, db, decodeURIComponent(orderSync[1])).catch((error) => ({ error: errorMessage(error) }));
+    return result.error ? fail(result.error, 409) : json(result);
   }
 
   const mapping = pathname.match(/^\/api\/middleware\/mappings\/(locations|payments)$/);

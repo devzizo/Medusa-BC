@@ -28,6 +28,12 @@ export const SETTING_KEYS = [
   "price_list_service",
   "price_list_line_service",
   "inventory_service",
+  // Order posting (Orders tab): default BC customer, shipping line, default location, BC's local currency.
+  "order_customer_number",
+  "order_shipping_type",
+  "order_shipping_number",
+  "order_location_code",
+  "order_local_currency",
   // BC price lists to import: "" = every active sales list, else a JSON array of codes.
   "price_lists",
   // Item sync options, "0" = off (unset = on).
@@ -53,6 +59,8 @@ export class MiddlewareStore extends DurableObject {
       CREATE TABLE IF NOT EXISTS run (id TEXT PRIMARY KEY, kind TEXT NOT NULL, status TEXT NOT NULL,
         started_at TEXT NOT NULL, finished_at TEXT, state TEXT NOT NULL, summary TEXT NOT NULL,
         issues TEXT NOT NULL, error TEXT);
+      CREATE TABLE IF NOT EXISTS order_sync (order_id TEXT PRIMARY KEY, display_id INTEGER, status TEXT NOT NULL,
+        bc_order_id TEXT, bc_order_number TEXT, bc_total REAL, medusa_total REAL, at TEXT NOT NULL, error TEXT);
       CREATE TABLE IF NOT EXISTS work (run_id TEXT NOT NULL, kind TEXT NOT NULL, seq INTEGER NOT NULL,
         key TEXT NOT NULL, payload TEXT NOT NULL, result TEXT, PRIMARY KEY (run_id, kind, seq));
     `);
@@ -109,6 +117,45 @@ export class MiddlewareStore extends DurableObject {
       }
     });
     return this.getMappings(kind, companyId);
+  }
+
+  // ---- Orders posted to BC (one row per Medusa order, by hand) ----
+
+  orderRecords(ids) {
+    if (!ids.length) return [];
+    return this.rows(`SELECT * FROM order_sync WHERE order_id IN (${ids.map(() => "?").join(",")})`, ...ids);
+  }
+
+  /**
+   * Claims an order for posting. Refused when it is already in BC, or being
+   * posted right now (a click older than 5 minutes is taken as dead).
+   */
+  claimOrder(orderId, displayId) {
+    const current = this.rows("SELECT * FROM order_sync WHERE order_id = ?", orderId)[0];
+    if (current?.status === "synced") return { error: `Already in BC as ${current.bc_order_number}.` };
+    if (current?.status === "syncing" && Date.now() - Date.parse(current.at) < 5 * 60 * 1000) return { error: "This order is being posted right now." };
+    this.sql.exec(
+      "INSERT INTO order_sync (order_id, display_id, status, at) VALUES (?, ?, 'syncing', ?) ON CONFLICT(order_id) DO UPDATE SET status = 'syncing', at = excluded.at, error = NULL",
+      orderId,
+      displayId,
+      new Date().toISOString(),
+    );
+    return { ok: true };
+  }
+
+  finishOrder(orderId, result) {
+    this.sql.exec(
+      "UPDATE order_sync SET status = ?, bc_order_id = ?, bc_order_number = ?, bc_total = ?, medusa_total = ?, at = ?, error = ? WHERE order_id = ?",
+      result.status,
+      result.bc_order_id ?? null,
+      result.bc_order_number ?? null,
+      result.bc_total ?? null,
+      result.medusa_total ?? null,
+      new Date().toISOString(),
+      result.error ?? null,
+      orderId,
+    );
+    return this.rows("SELECT * FROM order_sync WHERE order_id = ?", orderId)[0];
   }
 
   // ---- Runs ----
