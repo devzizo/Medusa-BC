@@ -1,4 +1,5 @@
-import { bcCredentials, listBcCompanies, listBcLocations, listBcPaymentMethods } from "./lib/bc.js";
+import { bcCredentials, listBcCompanies, listBcLocations, listBcODataRows, listBcPaymentMethods } from "./lib/bc.js";
+import { mapPriceLists } from "./lib/map.js";
 import { medusaClient } from "./lib/medusa.js";
 import { checkBusinessCentral, checkMedusa, describeSettings, isAuthorized } from "./config.js";
 import { DEFAULT_INVENTORY_SERVICE } from "./sync/inventory.js";
@@ -11,6 +12,7 @@ import { DEFAULT_PRICE_LIST_LINE_SERVICE, DEFAULT_PRICE_LIST_SERVICE } from "./s
 //   POST /api/middleware/check/{bc,medusa}      live connection checks
 //   POST /api/middleware/company                { company_id } chosen from BC's list
 //   POST /api/middleware/settings               posting groups and price list service names
+//   GET  /api/middleware/price-lists              BC's sales price lists, and which can be imported
 //   GET  /api/middleware/mappings/{locations,payments}
 //   POST /api/middleware/mappings/{locations,payments}   { mappings: [{ id, code|null }] }
 //   GET  /api/middleware/{items,categories,images,inventory,customers}/runs
@@ -46,6 +48,7 @@ const PUBLIC_SETTINGS = [
   "price_list_service",
   "price_list_line_service",
   "inventory_service",
+  "price_lists",
   "skip_blocked",
   "draft_zero_inventory",
 ];
@@ -87,6 +90,32 @@ export async function middlewareApi(request, env, pathname) {
     return json({ saved: await db.saveSettings(patch) });
   }
 
+  if (pathname === "/api/middleware/price-lists" && method === "GET") {
+    const saved = await db.getSettings();
+    if (!saved.company_id) return fail("Choose a Business Central company in Settings first.", 409);
+    const service = saved.price_list_service || DEFAULT_PRICE_LIST_SERVICE;
+    const headers = await listBcODataRows(bcCredentials(env), saved.company_name, service).catch((error) => error);
+    if (headers instanceof Error) return fail(`${errorMessage(headers)} (web service "${service}")`, 502);
+    // The same rules the item sync applies, so the page says which lists it would skip and why.
+    const { priceLists, issues } = mapPriceLists(headers, [], { currencyCode: "", storeVatBusPostingGroup: saved.vat_bus_posting_group, skusByItem: new Map(), baseUnitByItem: new Map() });
+    const importable = new Set(priceLists.map((list) => list.code));
+    const reasons = new Map(issues.map((issue) => [issue.ref, issue.message]));
+    return json({
+      price_lists: headers
+        .filter((h) => h.Code)
+        .map((h) => ({
+          code: h.Code,
+          description: h.Description ?? "",
+          status: h.Status ?? "",
+          currency: h.Currency_Code ?? "",
+          starts: h.Starting_Date ?? "",
+          ends: h.Ending_Date ?? "",
+          importable: importable.has(h.Code),
+          reason: reasons.get(h.Code) ?? null,
+        })),
+    });
+  }
+
   const mapping = pathname.match(/^\/api\/middleware\/mappings\/(locations|payments)$/);
   if (mapping) {
     const kind = mapping[1];
@@ -125,7 +154,7 @@ export async function middlewareApi(request, env, pathname) {
   const sync = pathname.match(/^\/api\/middleware\/(items|categories|images|inventory|customers)\/(runs|run)$/);
   if (sync) {
     const [, kind, action] = sync;
-    if (action === "runs" && method === "GET") return json({ runs: await db.listRuns(kind) });
+    if (action === "runs" && method === "GET") return json(await db.listRuns(kind));
     if (action === "run" && method === "POST") {
       const saved = await db.getSettings();
       if (!saved.company_id) return fail("Choose a Business Central company in Settings first.", 409);

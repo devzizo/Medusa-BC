@@ -56,6 +56,8 @@
     .notice { color: var(--muted); }
     details summary { cursor: pointer; margin-top: 8px; }
     details ul { margin: 8px 0 0; padding-inline-start: 20px; font-size: .85rem; }
+    .nowrap { white-space: nowrap; }
+    #price-lists { overflow-x: auto; }
     .run { padding: 12px 0; border-top: 1px solid var(--line); }
     .run:first-of-type { border-top: 0; }
     .summary td { padding: 4px 0; }
@@ -139,15 +141,16 @@
         <div class="row" style="margin-top:12px"><button id="save-settings" data-testid="save-settings">حفظ</button></div>
         <div class="result" id="result-settings" data-testid="result-settings"></div>
       </div>
-      <div class="panel" data-testid="options-panel">
-        <h2>خيارات مزامنة الأصناف</h2>
-        <p class="hint">BC هو الأصل: أي منتج في Medusa لا يطابق معرّفه (handle) صنفًا في BC يتحول إلى draft دائمًا.</p>
-        <label class="check"><input type="checkbox" id="skip_blocked" data-testid="opt-skip-blocked">
-          الأصناف المحظورة (Blocked) في BC لا تُستورد <span class="notice">— وإن أُلغي الخيار تُستورد كـ draft</span></label>
-        <label class="check"><input type="checkbox" id="draft_zero_inventory" data-testid="opt-draft-zero">
-          الصنف الذي مخزونه في BC صفر يتحول إلى draft <span class="notice">— مجموع مخزون الصنف في كل مستودعات BC</span></label>
-        <div class="row" style="margin-top:12px"><button id="save-options" data-testid="save-options">حفظ الخيارات</button></div>
-        <div class="result" id="result-options" data-testid="result-options"></div>
+      <div class="panel" data-testid="price-lists-panel">
+        <h2>قوائم الأسعار</h2>
+        <p class="hint">قوائم أسعار البيع (Sales Price Lists) في BC التي تنقلها مزامنة المنتجات إلى Medusa كقوائم أسعار (Price lists).
+          القائمة التي لم تعد تُنقل تتحول في Medusa إلى draft. القوائم الموقوفة، أو قوائم الشراء، أو الشاملة للضريبة لمجموعة VAT غير مجموعة المتجر لا تُنقل أبدًا.</p>
+        <label class="check"><input type="radio" name="price_list_mode" value="all" data-testid="price-lists-all"> كل قوائم البيع النشطة</label>
+        <label class="check"><input type="radio" name="price_list_mode" value="chosen" data-testid="price-lists-chosen"> القوائم المختارة فقط</label>
+        <div class="row" style="margin-top:12px"><button id="load-price-lists" class="ghost" data-testid="load-price-lists">عرض القوائم من BC</button></div>
+        <div id="price-lists" data-testid="price-lists"></div>
+        <div class="row" style="margin-top:12px"><button id="save-price-lists" data-testid="save-price-lists">حفظ قوائم الأسعار</button></div>
+        <div class="result" id="result-price-lists" data-testid="result-price-lists"></div>
       </div>
       <footer>بيانات الاتصال من Cloudflare: Workers &amp; Pages ← medusa-bc ← Settings ← Variables and Secrets. الأسرار لا تظهر هنا أبدًا.</footer>
     </section>
@@ -178,12 +181,22 @@
       </div>
 
       <div data-subview="items">
+        <div class="panel" data-testid="options-panel">
+          <h2>خيارات المزامنة</h2>
+          <p class="hint">BC هو الأصل: أي منتج في Medusa لا يطابق معرّفه (handle) صنفًا في BC يتحول إلى draft دائمًا.</p>
+          <label class="check"><input type="checkbox" id="skip_blocked" data-testid="opt-skip-blocked">
+            الأصناف المحظورة (Blocked) في BC لا تُستورد <span class="notice">— وإن أُلغي الخيار تُستورد كـ draft</span></label>
+          <label class="check"><input type="checkbox" id="draft_zero_inventory" data-testid="opt-draft-zero">
+            الصنف الذي مخزونه في BC صفر يتحول إلى draft <span class="notice">— مجموع مخزون الصنف في كل مستودعات BC</span></label>
+          <div class="row" style="margin-top:12px"><button id="save-options" data-testid="save-options">حفظ الخيارات</button></div>
+          <div class="result" id="result-options" data-testid="result-options"></div>
+        </div>
         <div class="panel">
           <h2>مزامنة المنتجات</h2>
           <p class="hint">
             تستورد من الشركة المختارة: الفئات، والأصناف غير المحظورة مع المتغيرات وسعر الوحدة، وقوائم أسعار البيع النشطة.
             المنتجات الجديدة تُنشأ مسودة (draft)، والإعادة تحدّث ولا تكرر. <strong>أي منتج في Medusa لا يطابق معرّفه (handle)
-            صنفًا في BC يتحول إلى draft</strong>، أيًا كان مصدره. خيارات الأصناف المحظورة والمخزون الصفري في تبويب الإعدادات.
+            صنفًا في BC يتحول إلى draft</strong>، أيًا كان مصدره. خيارات الأصناف المحظورة والمخزون الصفري أعلاه، واختيار قوائم الأسعار في الإعدادات.
             الصنف الذي رقمه مستعمل لمنتج آخر لا يُعدَّل ويُذكر. تعمل في الخادم خطوة خطوة، ولا تحتاج بقاء الصفحة مفتوحة.
           </p>
           <div class="row" style="margin-top:12px">
@@ -194,6 +207,7 @@
         </div>
         <div class="panel">
           <h2>السجل</h2>
+          <p class="notice" data-counter="items"></p>
           <div data-runs="items" data-testid="runs-items"><p class="notice">لا يوجد تشغيل بعد.</p></div>
         </div>
       </div>
@@ -214,6 +228,7 @@
         </div>
         <div class="panel">
           <h2>السجل</h2>
+          <p class="notice" data-counter="categories"></p>
           <div data-runs="categories" data-testid="runs-categories"><p class="notice">لا يوجد تشغيل بعد.</p></div>
         </div>
       </div>
@@ -234,6 +249,7 @@
         </div>
         <div class="panel">
           <h2>السجل</h2>
+          <p class="notice" data-counter="images"></p>
           <div data-runs="images" data-testid="runs-images"><p class="notice">لا يوجد تشغيل بعد.</p></div>
         </div>
       </div>
@@ -256,6 +272,7 @@
       </div>
       <div class="panel">
         <h2>السجل</h2>
+        <p class="notice" data-counter="inventory"></p>
         <div data-runs="inventory" data-testid="runs-inventory"><p class="notice">لا يوجد تشغيل بعد.</p></div>
       </div>
     </section>
@@ -277,6 +294,7 @@
       </div>
       <div class="panel">
         <h2>السجل</h2>
+        <p class="notice" data-counter="customers"></p>
         <div data-runs="customers" data-testid="runs-customers"><p class="notice">لا يوجد تشغيل بعد.</p></div>
       </div>
     </section>
@@ -360,6 +378,8 @@
         $("price_list_service").placeholder = data.defaults.price_list_service;
         $("price_list_line_service").placeholder = data.defaults.price_list_line_service;
         $("inventory_service").placeholder = data.defaults.inventory_service;
+        chosenLists = parseChosen(saved.price_lists);
+        document.querySelector(`[name=price_list_mode][value=${chosenLists ? "chosen" : "all"}]`).checked = true;
         showCompany();
       } catch (error) {
         if (!(error instanceof Locked)) show($("result-bc"), false, escape(`تعذّر قراءة الإعدادات: ${error.message}`));
@@ -406,6 +426,56 @@
         show($("result-settings"), true, "حُفظ.");
       } catch (error) {
         show($("result-settings"), false, escape(error.message));
+      }
+    });
+
+    // ---- Price lists: "" = every active sales list, else a JSON array of chosen codes ----
+    let chosenLists = null;
+    let bcLists = null;
+    const parseChosen = (value) => {
+      try { const codes = value ? JSON.parse(value) : null; return Array.isArray(codes) ? new Set(codes) : null; } catch { return null; }
+    };
+    const dateOnly = (value) => (value && !value.startsWith("0001") ? value.slice(0, 10) : "—");
+    const renderPriceLists = () => {
+      const box = $("price-lists");
+      if (!bcLists) { box.innerHTML = ""; return; }
+      if (!bcLists.length) { box.innerHTML = `<p class="notice">لا توجد قوائم أسعار في BC.</p>`; return; }
+      const all = document.querySelector("[name=price_list_mode]:checked")?.value !== "chosen";
+      box.innerHTML = `<table class="issues"><thead><tr><th></th><th>الكود</th><th>الوصف</th><th>العملة</th><th>من</th><th>إلى</th><th>الحالة</th></tr></thead><tbody>${bcLists.map((l) => `
+        <tr><td><input type="checkbox" data-list="${escape(l.code)}" ${!l.importable ? "disabled" : ""} ${l.importable && (all || chosenLists?.has(l.code)) ? "checked" : ""} ${all ? "disabled" : ""} aria-label="${escape(l.code)}"></td>
+        <td class="mono">${escape(l.code)}</td><td>${escape(l.description)}</td><td class="mono">${escape(l.currency || "—")}</td>
+        <td class="mono nowrap">${dateOnly(l.starts)}</td><td class="mono nowrap">${dateOnly(l.ends)}</td>
+        <td>${l.importable ? `<span class="state ok">متاحة</span>` : `<span class="notice"><bdi>${escape(l.reason ?? l.status)}</bdi></span>`}</td></tr>`).join("")}</tbody></table>`;
+    };
+    for (const radio of document.querySelectorAll("[name=price_list_mode]")) {
+      radio.addEventListener("change", () => {
+        // Switching to "chosen" starts from what was saved, or from every importable list.
+        if (radio.value === "chosen" && !chosenLists && bcLists) chosenLists = new Set(bcLists.filter((l) => l.importable).map((l) => l.code));
+        renderPriceLists();
+      });
+    }
+    $("load-price-lists").addEventListener("click", async () => {
+      $("load-price-lists").disabled = true;
+      try {
+        bcLists = (await api("price-lists")).price_lists;
+        renderPriceLists();
+        $("result-price-lists").className = "result";
+      } catch (error) {
+        show($("result-price-lists"), false, escape(error.message));
+      } finally {
+        $("load-price-lists").disabled = false;
+      }
+    });
+    $("save-price-lists").addEventListener("click", async () => {
+      const all = document.querySelector("[name=price_list_mode]:checked")?.value !== "chosen";
+      if (!all && !bcLists) { show($("result-price-lists"), false, "اعرض القوائم من BC أولًا لتختار منها."); return; }
+      const codes = all ? null : [...document.querySelectorAll("[data-list]:checked")].map((box) => box.dataset.list);
+      try {
+        saved = (await api("settings", { price_lists: codes ? JSON.stringify(codes) : "" })).saved;
+        chosenLists = parseChosen(saved.price_lists);
+        show($("result-price-lists"), true, escape(all ? "حُفظ: كل قوائم البيع النشطة تُنقل في المزامنة القادمة." : `حُفظ: ${codes.length} قائمة تُنقل في المزامنة القادمة.`));
+      } catch (error) {
+        show($("result-price-lists"), false, escape(error.message));
       }
     });
 
@@ -542,8 +612,16 @@
       const kind = event.target.closest?.("[data-csv]")?.dataset.csv;
       if (kind) downloadCsv(kind);
     });
-    const renderRuns = (kind, runs) => {
+    const when = (iso) => new Date(iso).toLocaleString("ar-SA-u-nu-latn-ca-gregory", { dateStyle: "medium", timeStyle: "medium" });
+    const duration = (from, to) => {
+      const s = Math.max(0, Math.round(((to ? Date.parse(to) : Date.now()) - Date.parse(from)) / 1000));
+      return s < 60 ? `${s} ث` : s < 3600 ? `${Math.floor(s / 60)} د ${s % 60} ث` : `${Math.floor(s / 3600)} س ${Math.floor((s % 3600) / 60)} د`;
+    };
+    const renderRuns = (kind, runs, total) => {
       const box = document.querySelector(`[data-runs="${kind}"]`);
+      const counter = document.querySelector(`[data-counter="${kind}"]`);
+      const last = runs.find((r) => r.finished_at);
+      counter.innerHTML = `عدد المزامنات: <strong data-testid="count-${kind}">${total}</strong>${last ? ` — آخر مزامنة انتهت: <bdi>${escape(when(last.finished_at))}</bdi>` : ""}`;
       if (!runs.length) { box.innerHTML = `<p class="notice">لا يوجد تشغيل بعد.</p>`; return; }
       const { summary: labels, stages } = SYNCS[kind];
       box.innerHTML = runs.map((run, index) => {
@@ -562,8 +640,9 @@
           .map((i) => `<li><span class="mono">${escape(i.ref)}</span>: <bdi>${escape(i.message)}</bdi></li>`).join("")}</ul></details>` : "";
         const download = index === 0 && run.issues.length ? `<button class="ghost" data-csv="${kind}" data-testid="csv-${kind}">تنزيل الملاحظات (CSV)</button>` : "";
         return `<div class="run" ${index === 0 ? `data-testid="last-run-${kind}"` : ""}>
-          <div class="row"><span class="state ${cls}">${text}${run.status === "running" ? ` — ${stages[run.stage] ?? run.stage}` : ""}</span>
-          <span class="notice">${new Date(run.started_at).toLocaleString("ar-SA-u-nu-latn")}</span></div>
+          <div class="row"><strong class="mono" data-testid="run-number">#${escape(run.number)}</strong>
+          <span class="state ${cls}">${text}${run.status === "running" ? ` — ${stages[run.stage] ?? run.stage}` : ""}</span>
+          <span class="notice">بدأت <bdi>${escape(when(run.started_at))}</bdi>${run.finished_at ? ` · انتهت <bdi>${escape(when(run.finished_at))}</bdi>` : ""} · المدة ${duration(run.started_at, run.finished_at)}</span></div>
           ${run.error ? `<p class="error"><bdi>${escape(run.error)}</bdi></p>` : ""}
           ${summary ? `<table class="summary">${summary}</table>` : ""}${barcodeList}${issues}
           ${download ? `<div class="row" style="margin-top:8px">${download}</div>` : ""}</div>`;
@@ -573,8 +652,8 @@
     const loadRuns = (kind) => async () => {
       const button = document.querySelector(`[data-run="${kind}"]`);
       try {
-        const { runs } = await api(`${kind}/runs`);
-        renderRuns(kind, runs);
+        const { runs, total } = await api(`${kind}/runs`);
+        renderRuns(kind, runs, total);
         const running = runs.some((r) => r.status === "running");
         button.disabled = running;
         clearTimeout(polling[kind]);

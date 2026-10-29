@@ -353,6 +353,17 @@ async function toDraft({ ctx, medusa, budget }) {
 
 // ---- price lists: read BC's, then upsert by code ----
 
+/** The price lists chosen in Settings, or null for every active sales list. */
+export const selectedPriceLists = (settings) => {
+  if (!settings.price_lists) return null;
+  try {
+    const codes = JSON.parse(settings.price_lists);
+    return Array.isArray(codes) ? new Set(codes.map(String)) : null;
+  } catch {
+    return null;
+  }
+};
+
 const ownedProducts = (ctx) =>
   ctx.work("product").filter((row) => row.result && ["created", "updated", "update_failed"].includes(row.result.status));
 
@@ -383,6 +394,7 @@ async function priceListsRead({ ctx, bc, budget }) {
   const mapped = mapPriceLists(headers, lines, {
     currencyCode: state.context.currency,
     storeVatBusPostingGroup: settings.vat_bus_posting_group,
+    selectedCodes: selectedPriceLists(settings),
     skusByItem,
     baseUnitByItem,
   });

@@ -9,14 +9,16 @@ The admin page (`public/index.html`, Arabic, RTL) has five tabs, the same tools 
 
 1. **الإعدادات (Settings)** — connection checks for Business Central and Medusa, the BC company
    (chosen from BC's own list; changing it clears both mappings), the posting groups (Store VAT Bus.
-   Post. Gr., Gen. Business Posting Group) and the price list web service names.
+   Post. Gr., Gen. Business Posting Group), the price list web service names, and **which BC sales
+   price lists go to Medusa** (all active ones, or the ones ticked; the page shows each list and why
+   one cannot be imported).
 2. **ربط المستودعات (Locations)** — each Medusa stock location → one BC location.
 3. **طرق الدفع (Payment methods)** — each Medusa payment provider → one BC payment method.
 4. **مزامنة الأصناف (Item sync)**, with two sub-tabs. **الفئات (Categories)** pulls BC's item categories
    into Medusa alone (create, rename, never duplicate). **المنتجات (Products)** is the full sync: categories, non-blocked items with variants and unit price, and
    active sales price lists, BC → Medusa. New products are drafts; a clashing SKU is skipped. **Every
    Medusa product whose handle matches no BC item becomes a draft**, whoever created it (BC is the
-   origin). Options in Settings: blocked items not imported; zero stock in BC → draft. A third
+   origin). Its options sit on the Products sub-tab: blocked items not imported; zero stock in BC → draft. A third
    sub-tab, **الصور (Images)**, moves each BC item's picture to the product the sync created, through
    Medusa's file storage (S3/R2 on Medusa Cloud): first image, and thumbnail unless the admin chose
    another; images added in Medusa stay; an unchanged picture is not uploaded again; one removed in
@@ -28,6 +30,9 @@ The admin page (`public/index.html`, Arabic, RTL) has five tabs, the same tools 
    address named "Business Central", owned by `metadata.bc_customer_number` (a second run updates,
    never duplicates; customers not from BC are never touched). An email another customer already
    holds, or an invalid one, is left out and listed in the notes.
+
+Every sync tab counts its runs (#1, #2…) and shows each run's start, end and duration, and when the
+last one finished.
 
 Duplicate barcodes found by the item sync are listed apart ("باركود مكرر") with the Medusa product
 that holds the barcode, and every note downloads as CSV, for fixing by hand.
@@ -89,9 +94,10 @@ secret is set, in which case every call needs `Authorization: Bearer <token>` an
 | `POST /api/middleware/check/medusa` | Calls `GET /admin/stores` with the Medusa secret key. |
 | `POST /api/middleware/check/bc` | Fresh Entra token, BC companies, whether the chosen one is there. |
 | `POST /api/middleware/company` | `{ company_id }` from BC's list; clears both mappings when it changes. |
-| `POST /api/middleware/settings` | Posting groups and price list service names. |
+| `POST /api/middleware/settings` | Posting groups, page names, chosen price lists (`price_lists`: `""` = all, or a JSON array of codes), item sync options. |
+| `GET /api/middleware/price-lists` | BC's sales price lists, each with whether the sync can import it and why not. |
 | `GET/POST /api/middleware/mappings/{locations,payments}` | Both lists live, and the saved mapping; POST `{ mappings: [{ id, code }] }`. |
-| `GET /api/middleware/{items,categories,images,inventory,customers}/runs`, `POST …/run` | Sync history; start a run (one at a time). |
+| `GET /api/middleware/{items,categories,images,inventory,customers}/runs`, `POST …/run` | `{ total, runs }`: the last 10 runs, each with its `number`; start a run (one at a time). |
 
 ## Deploy
 

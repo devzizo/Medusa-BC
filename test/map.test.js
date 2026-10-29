@@ -127,6 +127,13 @@ describe("mapPriceLists", () => {
     ])
   })
 
+  it("imports only the lists chosen in Settings when a choice is saved", () => {
+    const headers = [header(), header({ Code: "S00002", Description: "Eid" })]
+    expect(mapPriceLists(headers, [], context({ selectedCodes: new Set(["S00002"]) })).priceLists.map((l) => l.code)).toEqual(["S00002"])
+    expect(mapPriceLists(headers, [], context({ selectedCodes: new Set() })).priceLists).toEqual([])
+    expect(mapPriceLists(headers, [], context()).priceLists.map((l) => l.code)).toEqual(["S00001", "S00002"])
+  })
+
   it("prices one variant when the line names it", () => {
     const { priceLists } = mapPriceLists(
       [header()],

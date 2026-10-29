@@ -28,6 +28,8 @@ export const SETTING_KEYS = [
   "price_list_service",
   "price_list_line_service",
   "inventory_service",
+  // BC price lists to import: "" = every active sales list, else a JSON array of codes.
+  "price_lists",
   // Item sync options, "0" = off (unset = on).
   "skip_blocked",
   "draft_zero_inventory",
@@ -122,11 +124,20 @@ export class MiddlewareStore extends DurableObject {
       summary: JSON.parse(row.summary),
       issues: JSON.parse(row.issues),
       error: row.error,
+      // Each sync kind counts its runs: 1 for the first ever.
+      number: row.number,
     };
   }
 
   listRuns(kind) {
-    return this.rows("SELECT * FROM run WHERE kind = ? ORDER BY started_at DESC LIMIT 10", kind).map((row) => this.view(row));
+    const total = this.rows("SELECT COUNT(*) AS n FROM run WHERE kind = ?", kind)[0].n;
+    return {
+      total,
+      runs: this.rows(
+        "SELECT run.*, (SELECT COUNT(*) FROM run r2 WHERE r2.kind = run.kind AND r2.started_at <= run.started_at) AS number FROM run WHERE kind = ? ORDER BY started_at DESC LIMIT 10",
+        kind,
+      ).map((row) => this.view(row)),
+    };
   }
 
   /** Starts a run unless one is going; the alarm then drives it step by step. */

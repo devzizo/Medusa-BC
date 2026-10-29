@@ -180,6 +180,8 @@ export const mapPriceLists = (headers, lines, context) => {
   for (const header of headers) {
     const code = text(header, "Code");
     if (!code) continue;
+    // Settings may name the lists to import; the others count as not offered.
+    if (context.selectedCodes && !context.selectedCodes.has(code)) continue;
     const status = text(header, "Status");
     if (status && status !== "Active") {
       issues.push({ kind: "price_list", ref: code, message: `Status is ${status}, not Active; skipped.` });

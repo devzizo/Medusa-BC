@@ -141,7 +141,7 @@ list pages over OData.
 | Ownership | The middleware updates only products whose handle is `productHandle(metadata.bc_item_number)`. A SKU already used by another product → item skipped and reported, never overwritten. |
 | Not in BC → draft | BC is the origin: **every** Medusa product whose **handle** matches no BC item becomes a draft (owner's decision, 2026-10-29), whoever created it. Only the handle counts, not SKUs. Drafts are left alone. An empty BC item list changes nothing. Pages through `/admin/products` ordered by `id` (many products share a `created_at`, and a tie reorders between pages). |
 | Options (Settings) | **Blocked items not imported** (default on; off = imported as drafts). **Zero stock in BC → draft** (default on): the item's `inventory` from API v2.0, the total over all BC locations; an item with no figure is never drafted for stock. A product that comes back in stock is not republished: publishing stays the admin's call. |
-| Price lists | Only Status Active, Price Type Sale. Lists VAT-inclusive for another VAT Bus. Posting Group are skipped. Lines: skip Discount amount type, other units of measure, items/variants not imported. Blank variant code = all variants. Minimum Quantity > 1 → `min_quantity`. Date `0001-01-01` = none. Matched by `metadata.bc_price_list_code`; a list BC no longer offers → draft. |
+| Price lists | Chosen in **Settings** (`price_lists`): `""` = every active sales list, or a JSON array of codes; a list not chosen counts as not offered (an existing one becomes draft). Only Status Active, Price Type Sale. Lists VAT-inclusive for another VAT Bus. Posting Group are skipped. Lines: skip Discount amount type, other units of measure, items/variants not imported. Blank variant code = all variants. Minimum Quantity > 1 → `min_quantity`. Date `0001-01-01` = none. Matched by `metadata.bc_price_list_code`; a list BC no longer offers → draft. |
 | Idempotent | Re-running updates, never duplicates. Variant ids are kept (orders reference them). |
 | Metadata | Product/variant: `bc_item_id`, `bc_item_number`, unit of measure, GTIN, posting groups, last modified. |
 
@@ -224,7 +224,11 @@ clears both mappings (they name another company's codes).
   with summary counts and issues (capped at 2000 per run). Duplicate barcodes get their own list
   (BC item, barcode, the Medusa product holding it, linked to the admin), and every note downloads
   as CSV (UTF-8 with BOM, for Excel).
-- One run at a time across both kinds. A run older than 2 h is treated as dead.
+- Each kind numbers its runs (`number`, 1 = the first ever; `total` in `GET …/runs`); the page shows
+  number, start, end and duration of each run, and when the last one finished.
+- Item sync options (blocked items, zero stock) are on the Item sync tab; the price list choice is in
+  Settings (`GET /api/middleware/price-lists` lists BC's lists with the rule that would skip each).
+- One run at a time across all kinds. A run older than 2 h is treated as dead.
 
 ## 7. Integration details
 
