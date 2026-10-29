@@ -63,7 +63,7 @@ service that can be deployed, paused and rolled back on its own.
 ```
 
 - **Worker (HTTP)**: settings/status API, mapping API, "start run" endpoints, and the admin page
-  (static assets, as the landing page is today).
+  (static assets in `public/`, one tab per feature; the first is "Connection").
 - **Cron Triggers**: scheduled item and inventory syncs.
 - **Queues**: a run is split into batches (e.g. 50 products per message). One Worker invocation has
   CPU time and subrequest limits; a catalog of thousands of items must never be one invocation.
@@ -81,9 +81,8 @@ secrets only via `wrangler secret put` (production) or `.dev.vars` (local, git-i
 
 | Name | Kind | Example | Notes |
 |---|---|---|---|
-| `MEDUSA_BACKEND_URL` | var | `https://hoven-sa.medusajs.app` | Already used by the landing page. |
+| `MEDUSA_BACKEND_URL` | var | `https://hoven-sa.medusajs.app` | |
 | `MEDUSA_ADMIN_API_KEY` | **secret** | `sk_…` | Medusa Admin → Settings → Secret API Keys. Sent as `Authorization: Basic <sk_…>` (Medusa docs: Basic, **not** Bearer; Bearer gives 401). Acts as the admin user who created it, so create a dedicated user for the integration. |
-| `MEDUSA_PUBLISHABLE_KEY` | var | `pk_…` | Store API only (landing page). Public by design. |
 | `MEDUSA_SALES_CHANNEL_ID` | var | `sc_…` | Channel new products join. Empty = the store's default. |
 
 ### 5.2 Business Central
@@ -111,8 +110,8 @@ secrets only via `wrangler secret put` (production) or `.dev.vars` (local, git-i
 
 ### 5.4 Settings endpoint
 
-All behind the admin token, in `src/config.js`, and shown on the landing page (a Business Central
-tab and a Medusa tab):
+All behind the admin token, in `src/config.js`, and shown on the admin page's first tab, "Connection" (a Business Central
+section and a Medusa section):
 
 - `GET /api/middleware/status`: which settings are set or missing, **never a secret's value**.
 - `POST /api/middleware/check/medusa`: `GET /admin/stores` with the secret key.
@@ -240,7 +239,6 @@ No id map table is needed in phase 1: BC identity is carried in Medusa handles, 
 - Medusa secret key belongs to a dedicated admin user; revoke = cut the integration off.
 - BC app gets read permissions in phase 1; write only when phase 2 starts.
 - All `/api/middleware/*` behind `MIDDLEWARE_ADMIN_TOKEN` and Cloudflare Access.
-- The existing landing page keeps using only the publishable key.
 
 ## 10. Acceptance criteria
 

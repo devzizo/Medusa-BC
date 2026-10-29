@@ -1,26 +1,19 @@
 # Medusa BC
 
-Product landing page for the Hoven Medusa store, deployed on Cloudflare Workers.
+The middleware between the Hoven Medusa store and Microsoft Dynamics 365 Business Central, on
+Cloudflare Workers. It syncs Business Central into Medusa from outside Medusa.
 
 Live: https://medusa-bc.dev-zizo.workers.dev
 
-- `public/index.html` — the page (Arabic, RTL). Loads products from `/api/products`.
-- `src/index.js` — Worker that proxies `/api/products` to the Medusa Store API
-  (`/store/products`) using the store's publishable key, and serves `public/` for everything else.
-- `wrangler.jsonc` — backend URL, publishable key and region (SAR) live in `vars`.
-
-The landing page only uses the publishable key (Store API). Never put the secret `sk_` admin key in this repo.
-
-## Middleware (Medusa ↔ Business Central)
-
-This Worker is becoming the middleware that syncs Business Central into Medusa from outside Medusa.
-
+- `public/index.html` — the admin page (Arabic, RTL), one tab per feature. The first tab,
+  **فحص الاتصال (Connection)**, takes the middleware token and shows a Business Central section and a
+  Medusa section, each listing its settings (set / missing) with a "check connection" button.
+- `src/index.js` — serves the page and routes `/api/middleware/*`.
+- `src/config.js` — the Medusa and BC token settings and the middleware API (below).
 - `docs/PRD.md` — the full spec: architecture, settings, sync rules, acceptance criteria.
 - `.claude/skills/medusa-bc-middleware/SKILL.md` — how to build and verify it (for Claude Code).
-- `src/config.js` — the Medusa and BC token settings and the middleware API (below).
-- `public/index.html` — the landing page: enter the middleware token, then a **Business Central** tab
-  and a **Medusa** tab, each listing its settings (set / missing) with a "check connection" button.
-  The old products page moved to `/products`.
+
+Never put the Medusa secret `sk_` key, the BC client secret or the middleware token in this repo.
 
 ### Settings
 
@@ -37,7 +30,7 @@ Locally, copy `.dev.vars.example` to `.dev.vars` (git-ignored).
 
 ### Check the connection
 
-Open the landing page, or call the API (all need `Authorization: Bearer $MIDDLEWARE_ADMIN_TOKEN`):
+Open the admin page, or call the API (all need `Authorization: Bearer $MIDDLEWARE_ADMIN_TOKEN`):
 
 | Route | Does |
 |---|---|

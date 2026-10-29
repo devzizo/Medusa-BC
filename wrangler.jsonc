@@ -4,14 +4,13 @@
   "main": "src/index.js",
   "compatibility_date": "2026-10-01",
   "assets": {
-    "directory": "./public"
+    "directory": "./public",
+    // src/index.js falls back to env.ASSETS for every non-API path; without
+    // the binding any unknown path threw (Cloudflare error 1101) instead of 404.
+    "binding": "ASSETS"
   },
   "vars": {
     "MEDUSA_BACKEND_URL": "https://hoven-sa.medusajs.app",
-    // Publishable keys are public by design (Store API only), so it's fine in config.
-    "MEDUSA_PUBLISHABLE_KEY": "pk_726da061a4cbfd88624254a6501963b30cd627eb91e4e2fce875d5469ab259c4",
-    // "saudi arabia" region (SAR)
-    "MEDUSA_REGION_ID": "reg_01M1CRW6JX81RRA0H2SA2XE43Z",
 
     // Business Central connection (not secret). See docs/PRD.md §5.
     "BC_ENVIRONMENT_URL": "",

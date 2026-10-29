@@ -60,5 +60,6 @@ It replaces the in-Medusa plugin `@hoven/medusa-bc` (repo `devzizo/essentials-st
 
 ## Deploy
 
-`npx wrangler deploy` (or the Cloudflare dashboard's Git integration on this repo). The landing page
-in `public/` and `/api/products` share the Worker; keep them working.
+`npx wrangler deploy` (or the Cloudflare dashboard's Git integration on this repo). The Worker serves
+only the middleware: the admin page in `public/` (one tab per feature, "Connection" first) and
+`/api/middleware/*`. The old products landing page was removed on purpose.

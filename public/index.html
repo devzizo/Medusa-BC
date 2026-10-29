@@ -3,84 +3,123 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Medusa-BC — فحص الاتصال</title>
+  <title>Medusa-BC</title>
   <style>
     :root { --bg: #f6f5f1; --panel: #fff; --text: #141414; --muted: #6b6b6b; --line: #e3e0d8; --accent: #294036; --ok: #1f6b3a; --okbg: #e8f3ec; --err: #9b2c1f; --errbg: #f8ebe8; }
     * { box-sizing: border-box; }
     body { margin: 0; background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, "Segoe UI", Tahoma, sans-serif; line-height: 1.6; }
-    main { max-width: 760px; margin: 0 auto; padding: 32px 16px 64px; }
-    h1 { font-size: 1.6rem; margin: 0 0 4px; }
-    .sub { color: var(--muted); margin: 0 0 24px; }
+    header { background: var(--panel); border-bottom: 1px solid var(--line); }
+    .bar { max-width: 1040px; margin: 0 auto; padding: 16px 16px 0; }
+    .top { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+    h1 { font-size: 1.3rem; margin: 0; }
+    .sub { color: var(--muted); margin: 0; font-size: .9rem; }
+    nav { display: flex; gap: 4px; margin-top: 12px; overflow-x: auto; }
+    nav a { padding: 10px 14px; color: var(--muted); text-decoration: none; border-bottom: 2px solid transparent; white-space: nowrap; font-weight: 600; }
+    nav a[aria-current="page"] { color: var(--text); border-bottom-color: var(--accent); }
+    main { max-width: 1040px; margin: 0 auto; padding: 24px 16px 64px; }
     .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 2px; padding: 20px; }
+    h2 { font-size: 1.05rem; margin: 0 0 4px; }
+    .hint { color: var(--muted); font-size: .85rem; margin: 6px 0 0; }
     label { display: block; font-weight: 600; margin-bottom: 6px; }
     .row { display: flex; gap: 8px; flex-wrap: wrap; }
     input { flex: 1; min-width: 200px; padding: 10px 12px; font: inherit; border: 1px solid var(--line); border-radius: 2px; background: #fff; direction: ltr; text-align: left; }
     button { padding: 10px 18px; font: inherit; font-weight: 600; border: 1px solid var(--accent); border-radius: 2px; cursor: pointer; background: var(--accent); color: #fff; }
     button.ghost { background: #fff; color: var(--accent); }
     button:disabled { opacity: .5; cursor: default; }
-    .hint { color: var(--muted); font-size: .85rem; margin: 6px 0 0; }
-    .tabs { display: flex; gap: 0; margin: 24px 0 0; border-bottom: 1px solid var(--line); }
-    .tab { background: none; color: var(--muted); border: 0; border-bottom: 2px solid transparent; border-radius: 0; padding: 10px 16px; }
-    .tab[aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); }
-    .tabpanel { border-top: 0; }
-    table { width: 100%; border-collapse: collapse; margin: 0 0 16px; font-size: .92rem; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
+    @media (max-width: 760px) { .grid { grid-template-columns: 1fr; } }
+    .side-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+    .state { font-size: .8rem; font-weight: 600; padding: 2px 8px; border-radius: 2px; background: #f0eee8; color: var(--muted); }
+    .state.ok { background: var(--okbg); color: var(--ok); }
+    .state.err { background: var(--errbg); color: var(--err); }
+    table { width: 100%; border-collapse: collapse; margin: 0 0 16px; font-size: .88rem; table-layout: fixed; }
     td { padding: 8px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
-    td:first-child { font-family: ui-monospace, Menlo, Consolas, monospace; direction: ltr; text-align: left; width: 45%; }
-    td[colspan] { font-family: inherit; direction: rtl; text-align: right; color: var(--muted); }
+    td.k { font-family: ui-monospace, Menlo, Consolas, monospace; direction: ltr; text-align: left; width: 48%; word-break: break-all; padding-inline-start: 8px; }
     td.v { direction: ltr; text-align: left; color: var(--muted); word-break: break-all; }
-    .tag { display: inline-block; padding: 0 8px; border-radius: 2px; font-size: .8rem; font-weight: 600; }
+    td[colspan] { color: var(--muted); }
+    .tag { display: inline-block; padding: 0 8px; border-radius: 2px; font-size: .78rem; font-weight: 600; }
     .tag.set { background: var(--okbg); color: var(--ok); }
     .tag.missing { background: var(--errbg); color: var(--err); }
-    .result { margin-top: 16px; padding: 12px 14px; border-radius: 2px; display: none; }
+    .result { margin-top: 12px; padding: 12px 14px; border-radius: 2px; display: none; word-break: break-word; }
     .result.ok { display: block; background: var(--okbg); color: var(--ok); }
     .result.err { display: block; background: var(--errbg); color: var(--err); }
     .result ul { margin: 8px 0 0; padding-inline-start: 20px; color: var(--text); }
-    .result code { direction: ltr; unicode-bidi: embed; }
-    .error { color: var(--err); margin-top: 12px; }
-    footer { margin-top: 32px; color: var(--muted); font-size: .85rem; }
-    footer a { color: var(--accent); }
+    .result code { direction: ltr; unicode-bidi: embed; font-size: .85rem; }
+    .error { color: var(--err); margin: 12px 0 0; }
+    footer { margin-top: 24px; color: var(--muted); font-size: .85rem; }
   </style>
 </head>
 <body>
-  <main>
-    <h1>Medusa-BC</h1>
-    <p class="sub">الوسيط بين متجر Medusa و Microsoft Dynamics 365 Business Central. هنا تفحص اتصال كل طرف بالإعدادات المحفوظة في Cloudflare.</p>
-
-    <section class="panel">
-      <label for="token">توكن الوسيط (MIDDLEWARE_ADMIN_TOKEN)</label>
-      <div class="row">
-        <input id="token" type="password" autocomplete="off" placeholder="الصق التوكن هنا" data-testid="token">
-        <button id="load" data-testid="load">عرض الإعدادات</button>
+  <header>
+    <div class="bar">
+      <div class="top">
+        <div>
+          <h1>Medusa-BC</h1>
+          <p class="sub">الوسيط بين متجر Medusa و Microsoft Dynamics 365 Business Central</p>
+        </div>
       </div>
-      <p class="hint">يبقى في هذا التبويب من المتصفح فقط، ويُمسح عند إغلاقه.</p>
-      <p class="error" id="token-error" hidden data-testid="token-error"></p>
-    </section>
-
-    <div class="tabs" role="tablist">
-      <button class="tab" role="tab" id="tab-bc" aria-controls="panel-bc" aria-selected="true" data-testid="tab-bc">Business Central</button>
-      <button class="tab" role="tab" id="tab-medusa" aria-controls="panel-medusa" aria-selected="false" data-testid="tab-medusa">Medusa</button>
+      <!-- One link per feature; each section below is shown for its hash. -->
+      <nav aria-label="الأقسام">
+        <a href="#connection" data-tab="connection" data-testid="nav-connection">فحص الاتصال</a>
+      </nav>
     </div>
+  </header>
 
-    <section class="panel tabpanel" role="tabpanel" id="panel-bc" aria-labelledby="tab-bc" data-testid="panel-bc">
-      <table><tbody id="settings-bc"><tr><td colspan="2">اعرض الإعدادات أولًا.</td></tr></tbody></table>
-      <button id="check-bc" class="ghost" disabled data-testid="check-bc">فحص الاتصال بـ Business Central</button>
-      <div class="result" id="result-bc" data-testid="result-bc"></div>
+  <main>
+    <section data-view="connection" data-testid="view-connection">
+      <div class="panel">
+        <label for="token">توكن الوسيط (MIDDLEWARE_ADMIN_TOKEN)</label>
+        <div class="row">
+          <input id="token" type="password" autocomplete="off" placeholder="الصق التوكن هنا" data-testid="token">
+          <button id="load" data-testid="load">عرض الإعدادات</button>
+        </div>
+        <p class="hint">يبقى في هذا التبويب من المتصفح فقط، ويُمسح عند إغلاقه.</p>
+        <p class="error" id="token-error" hidden data-testid="token-error"></p>
+      </div>
+
+      <div class="grid">
+        <div class="panel" data-testid="side-bc">
+          <div class="side-head">
+            <h2>Business Central</h2>
+            <span class="state" id="state-bc" data-testid="state-bc">لم يُفحص</span>
+          </div>
+          <table><tbody id="settings-bc"><tr><td colspan="2">اعرض الإعدادات أولًا.</td></tr></tbody></table>
+          <button id="check-bc" class="ghost" disabled data-testid="check-bc">فحص الاتصال بـ Business Central</button>
+          <div class="result" id="result-bc" data-testid="result-bc"></div>
+        </div>
+
+        <div class="panel" data-testid="side-medusa">
+          <div class="side-head">
+            <h2>Medusa</h2>
+            <span class="state" id="state-medusa" data-testid="state-medusa">لم يُفحص</span>
+          </div>
+          <table><tbody id="settings-medusa"><tr><td colspan="2">اعرض الإعدادات أولًا.</td></tr></tbody></table>
+          <button id="check-medusa" class="ghost" disabled data-testid="check-medusa">فحص الاتصال بـ Medusa</button>
+          <div class="result" id="result-medusa" data-testid="result-medusa"></div>
+        </div>
+      </div>
+
+      <footer>الأسرار تُضبط من Cloudflare (<code>npx wrangler secret put</code>) ولا تظهر هنا أبدًا.</footer>
     </section>
-
-    <section class="panel tabpanel" role="tabpanel" id="panel-medusa" aria-labelledby="tab-medusa" hidden data-testid="panel-medusa">
-      <table><tbody id="settings-medusa"><tr><td colspan="2">اعرض الإعدادات أولًا.</td></tr></tbody></table>
-      <button id="check-medusa" class="ghost" disabled data-testid="check-medusa">فحص الاتصال بـ Medusa</button>
-      <div class="result" id="result-medusa" data-testid="result-medusa"></div>
-    </section>
-
-    <footer>
-      الأسرار تُضبط بـ <code>npx wrangler secret put</code> ولا تظهر هنا أبدًا. ·
-      <a href="/products">صفحة المنتجات</a>
-    </footer>
   </main>
 
   <script>
     const $ = (id) => document.getElementById(id);
+
+    // Tabs: the hash picks the section; an unknown hash falls back to the first tab.
+    const showTab = () => {
+      const links = [...document.querySelectorAll("nav a[data-tab]")];
+      const wanted = location.hash.slice(1);
+      const current = links.some((link) => link.dataset.tab === wanted) ? wanted : links[0].dataset.tab;
+      for (const link of links) {
+        if (link.dataset.tab === current) link.setAttribute("aria-current", "page");
+        else link.removeAttribute("aria-current");
+      }
+      for (const view of document.querySelectorAll("[data-view]")) view.hidden = view.dataset.view !== current;
+    };
+    addEventListener("hashchange", showTab);
+    showTab();
+
     const KEY = "medusa-bc-token";
     try { $("token").value = sessionStorage.getItem(KEY) ?? ""; } catch {}
 
@@ -95,20 +134,10 @@
       return body;
     };
 
-    for (const tab of document.querySelectorAll(".tab")) {
-      tab.addEventListener("click", () => {
-        for (const other of document.querySelectorAll(".tab")) {
-          const selected = other === tab;
-          other.setAttribute("aria-selected", String(selected));
-          $(other.getAttribute("aria-controls")).hidden = !selected;
-        }
-      });
-    }
-
     const renderSettings = (target, rows) => {
       $(target).innerHTML = rows.map((row) => `
         <tr>
-          <td>${escape(row.name)}</td>
+          <td class="k">${escape(row.name)}</td>
           <td class="v">${row.set ? '<span class="tag set">مضبوط</span>' : '<span class="tag missing">ناقص</span>'}
             ${!row.secret && row.value ? " " + escape(row.value) : ""}${row.secret && row.set ? " (سرّي)" : ""}</td>
         </tr>`).join("");
@@ -134,17 +163,24 @@
     const check = (side) => async () => {
       const button = $(`check-${side}`);
       const box = $(`result-${side}`);
+      const state = $(`state-${side}`);
       button.disabled = true;
       box.className = "result";
+      state.textContent = "جارٍ الفحص…";
+      state.className = "state";
       try {
         const result = await call(`/api/middleware/check/${side}`, "POST");
         const companies = (result.companies ?? [])
           .map((c) => `<li>${escape(c.displayName)} — <code>${escape(c.id)}</code></li>`).join("");
-        box.innerHTML = `${result.ok ? "✓ " : "✗ "}${escape(result.message)}${companies ? `<ul>${companies}</ul>` : ""}`;
+        box.innerHTML = `<bdi>${escape(result.message)}</bdi>${companies ? `<ul>${companies}</ul>` : ""}`;
         box.className = `result ${result.ok ? "ok" : "err"}`;
+        state.textContent = result.ok ? "متصل" : "غير متصل";
+        state.className = `state ${result.ok ? "ok" : "err"}`;
       } catch (error) {
         box.textContent = error.message;
         box.className = "result err";
+        state.textContent = "غير متصل";
+        state.className = "state err";
       } finally {
         button.disabled = false;
       }
