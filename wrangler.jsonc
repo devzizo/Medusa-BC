@@ -3,14 +3,32 @@
   "name": "medusa-bc",
   "main": "src/index.js",
   "compatibility_date": "2026-10-01",
+  // node:crypto (sha256 for handles of Arabic BC codes).
+  "compatibility_flags": ["nodejs_compat"],
+  // Keep variables set in the dashboard across deploys.
+  "keep_vars": true,
   "assets": {
-    "directory": "./public"
+    "directory": "./public",
+    // src/index.js falls back to env.ASSETS for every non-API path; without
+    // the binding any unknown path threw (Cloudflare error 1101) instead of 404.
+    "binding": "ASSETS"
   },
+  // The middleware's own state (settings chosen in the page, mappings, sync
+  // runs): one Durable Object with SQLite storage, nothing to create first.
+  "durable_objects": {
+    "bindings": [{ "name": "STORE", "class_name": "MiddlewareStore" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["MiddlewareStore"] }],
   "vars": {
-    "MEDUSA_BACKEND_URL": "https://hoven-sa.medusajs.app",
-    // Publishable keys are public by design (Store API only), so it's fine in config.
-    "MEDUSA_PUBLISHABLE_KEY": "pk_726da061a4cbfd88624254a6501963b30cd627eb91e4e2fce875d5469ab259c4",
-    // "saudi arabia" region (SAR)
-    "MEDUSA_REGION_ID": "reg_01M1CRW6JX81RRA0H2SA2XE43Z"
+    "MEDUSA_BACKEND_URL": "https://hoven-sa.medusajs.app"
+
+    // Business Central settings (BC_ENVIRONMENT_URL, BC_TENANT_ID, BC_CLIENT_ID,
+    // BC_COMPANY_ID) are set in the Cloudflare dashboard, not here: a value
+    // listed here would overwrite the dashboard's on every deploy.
+
+    // Secrets, set with `npx wrangler secret put <NAME>` (never here):
+    //   MEDUSA_ADMIN_API_KEY  - Medusa secret API key (sk_...)
+    //   BC_CLIENT_SECRET      - Entra ID app client secret
+    //   MIDDLEWARE_ADMIN_TOKEN - optional extra lock for /api/middleware/*
   }
 }

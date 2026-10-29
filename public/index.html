@@ -3,109 +3,699 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>هوفن — المنتجات</title>
+  <title>Medusa-BC</title>
   <style>
-    :root {
-      --bg: #f7f5f2; --card: #ffffff; --text: #1c1917; --muted: #78716c;
-      --border: #e7e5e4; --accent: #1e3a8a;
-    }
-    @media (prefers-color-scheme: dark) {
-      :root { --bg: #0c0a09; --card: #1c1917; --text: #f5f5f4; --muted: #a8a29e; --border: #292524; --accent: #93c5fd; }
-    }
-    * { box-sizing: border-box; margin: 0; }
-    body { background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, "Segoe UI", Tahoma, sans-serif; }
-    header { padding: 48px 16px 24px; text-align: center; }
-    h1 { font-size: clamp(2rem, 6vw, 3rem); letter-spacing: -0.02em; }
-    header p { color: var(--muted); margin-top: 8px; }
-    .search { display: flex; justify-content: center; padding: 0 16px 24px; }
-    .search input {
-      width: 100%; max-width: 420px; padding: 12px 16px; font: inherit; color: var(--text);
-      background: var(--card); border: 1px solid var(--border); border-radius: 999px;
-    }
-    main { max-width: 1200px; margin: 0 auto; padding: 0 16px 48px; }
-    .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
-    .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; }
-    .card img { width: 100%; aspect-ratio: 1; object-fit: cover; background: var(--border); display: block; }
-    .card .body { padding: 12px; display: flex; flex-direction: column; gap: 6px; flex: 1; }
-    .card h2 { font-size: 0.95rem; font-weight: 600; line-height: 1.4; }
-    .price { color: var(--accent); font-weight: 700; margin-top: auto; }
-    .status { text-align: center; color: var(--muted); padding: 24px 0; }
-    .more { display: block; margin: 24px auto 0; padding: 12px 28px; font: inherit; font-weight: 600; color: #fff; background: #1e3a8a; border: 0; border-radius: 999px; cursor: pointer; }
-    .more[hidden] { display: none; }
+    :root { --bg: #f6f5f1; --panel: #fff; --text: #141414; --muted: #6b6b6b; --line: #e3e0d8; --accent: #294036; --ok: #1f6b3a; --okbg: #e8f3ec; --err: #9b2c1f; --errbg: #f8ebe8; --warn: #8a5a00; --warnbg: #fbf1dc; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, "Segoe UI", Tahoma, sans-serif; line-height: 1.6; }
+    header { background: var(--panel); border-bottom: 1px solid var(--line); }
+    .bar { max-width: 1040px; margin: 0 auto; padding: 16px 16px 0; }
+    h1 { font-size: 1.3rem; margin: 0; }
+    .sub { color: var(--muted); margin: 0; font-size: .9rem; }
+    nav { display: flex; gap: 4px; margin-top: 12px; overflow-x: auto; }
+    nav a { padding: 10px 14px; color: var(--muted); text-decoration: none; border-bottom: 2px solid transparent; white-space: nowrap; font-weight: 600; }
+    nav a[aria-current="page"] { color: var(--text); border-bottom-color: var(--accent); }
+    main { max-width: 1040px; margin: 0 auto; padding: 24px 16px 64px; }
+    .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 2px; padding: 20px; }
+    .panel + .panel, .grid + .panel, .panel + .grid { margin-top: 16px; }
+    .grid > .panel { margin-top: 0; }
+    h2 { font-size: 1.05rem; margin: 0 0 4px; }
+    .hint { color: var(--muted); font-size: .85rem; margin: 6px 0 0; }
+    label { display: block; font-weight: 600; margin-bottom: 6px; }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    input, select { padding: 10px 12px; font: inherit; border: 1px solid var(--line); border-radius: 2px; background: #fff; }
+    input { flex: 1; min-width: 180px; direction: ltr; text-align: left; }
+    select { min-width: 220px; max-width: 100%; }
+    button { padding: 10px 18px; font: inherit; font-weight: 600; border: 1px solid var(--accent); border-radius: 2px; cursor: pointer; background: var(--accent); color: #fff; }
+    button.ghost { background: #fff; color: var(--accent); }
+    button:disabled { opacity: .5; cursor: default; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 16px; margin: 12px 0 16px; }
+    .fields input { width: 100%; min-width: 0; }
+    @media (max-width: 760px) { .grid, .fields { grid-template-columns: 1fr; } }
+    .side-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+    .state { font-size: .8rem; font-weight: 600; padding: 2px 8px; border-radius: 2px; background: #f0eee8; color: var(--muted); white-space: nowrap; }
+    .state.ok { background: var(--okbg); color: var(--ok); }
+    .state.err { background: var(--errbg); color: var(--err); }
+    .state.warn { background: var(--warnbg); color: var(--warn); }
+    table { width: 100%; border-collapse: collapse; margin: 0 0 16px; font-size: .88rem; }
+    th { text-align: start; font-weight: 600; color: var(--muted); padding: 8px 0; border-bottom: 1px solid var(--line); }
+    td { padding: 8px 0; border-bottom: 1px solid var(--line); vertical-align: middle; }
+    .settings { table-layout: fixed; }
+    .settings td.k { font-family: ui-monospace, Menlo, Consolas, monospace; direction: ltr; text-align: left; width: 48%; word-break: break-all; padding-inline-start: 8px; }
+    .settings td.v { direction: ltr; text-align: left; color: var(--muted); word-break: break-all; }
+    td[colspan] { color: var(--muted); }
+    .mono { font-family: ui-monospace, Menlo, Consolas, monospace; direction: ltr; unicode-bidi: embed; }
+    .tag { display: inline-block; padding: 0 8px; border-radius: 2px; font-size: .78rem; font-weight: 600; }
+    .tag.set { background: var(--okbg); color: var(--ok); }
+    .tag.missing { background: var(--errbg); color: var(--err); }
+    .result { margin-top: 12px; padding: 12px 14px; border-radius: 2px; display: none; word-break: break-word; }
+    .result.ok { display: block; background: var(--okbg); color: var(--ok); }
+    .result.err { display: block; background: var(--errbg); color: var(--err); }
+    .error { color: var(--err); margin: 12px 0 0; }
+    .notice { color: var(--muted); }
+    details summary { cursor: pointer; margin-top: 8px; }
+    details ul { margin: 8px 0 0; padding-inline-start: 20px; font-size: .85rem; }
+    .nowrap { white-space: nowrap; }
+    #price-lists { overflow-x: auto; }
+    .run { padding: 12px 0; border-top: 1px solid var(--line); }
+    .run:first-of-type { border-top: 0; }
+    .summary td { padding: 4px 0; }
+    table.issues { font-size: .82rem; margin-top: 8px; }
+    table.issues td, table.issues th { padding: 6px 8px 6px 0; }
+    .summary td:last-child { text-align: end; font-variant-numeric: tabular-nums; }
+    footer { margin-top: 24px; color: var(--muted); font-size: .85rem; }
+    .subtabs { display: flex; gap: 8px; margin-bottom: 16px; }
+    label.check { display: flex; gap: 10px; align-items: baseline; font-weight: 500; margin-top: 12px; }
+    label.check input { flex: none; min-width: 0; width: 18px; height: 18px; }
+    .subtab { background: #fff; color: var(--muted); border: 1px solid var(--line); }
+    .subtab[aria-selected="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
   </style>
 </head>
 <body>
   <header>
-    <h1>هوفن</h1>
-    <p id="count">جاري تحميل المنتجات…</p>
+    <div class="bar">
+      <h1>Medusa-BC</h1>
+      <p class="sub">الوسيط بين متجر Medusa و Microsoft Dynamics 365 Business Central</p>
+      <!-- One link per feature; each section below is shown for its hash. -->
+      <nav aria-label="الأقسام">
+        <a href="#settings" data-tab="settings" data-testid="nav-settings">الإعدادات</a>
+        <a href="#locations" data-tab="locations" data-testid="nav-locations">ربط المستودعات</a>
+        <a href="#payments" data-tab="payments" data-testid="nav-payments">طرق الدفع</a>
+        <a href="#items" data-tab="items" data-testid="nav-items">مزامنة الأصناف</a>
+        <a href="#inventory" data-tab="inventory" data-testid="nav-inventory">مزامنة المخزون</a>
+        <a href="#customers" data-tab="customers" data-testid="nav-customers">نقل العملاء</a>
+      </nav>
+    </div>
   </header>
-  <form class="search" id="search">
-    <input type="search" name="q" placeholder="ابحث عن منتج…" aria-label="بحث">
-  </form>
+
   <main>
-    <div class="grid" id="grid"></div>
-    <p class="status" id="status" hidden></p>
-    <button class="more" id="more" hidden>عرض المزيد</button>
+    <!-- Shown only when the Worker has MIDDLEWARE_ADMIN_TOKEN set (the API answers 401). -->
+    <div class="panel" id="lock" hidden data-testid="lock" style="margin-bottom:16px">
+      <label for="token">توكن الوسيط (MIDDLEWARE_ADMIN_TOKEN)</label>
+      <div class="row">
+        <input id="token" type="password" autocomplete="off" placeholder="الصق التوكن هنا" data-testid="token">
+        <button id="unlock" data-testid="unlock">دخول</button>
+      </div>
+    </div>
+
+    <!-- ===== Settings ===== -->
+    <section data-view="settings" data-testid="view-settings">
+      <div class="grid">
+        <div class="panel" data-testid="side-bc">
+          <div class="side-head"><h2>Business Central</h2><span class="state" id="state-bc" data-testid="state-bc">لم يُفحص</span></div>
+          <table class="settings"><tbody id="settings-bc"><tr><td colspan="2">جارٍ التحميل…</td></tr></tbody></table>
+          <button id="check-bc" class="ghost" data-testid="check-bc">فحص الاتصال</button>
+          <div class="result" id="result-bc" data-testid="result-bc"></div>
+        </div>
+        <div class="panel" data-testid="side-medusa">
+          <div class="side-head"><h2>Medusa</h2><span class="state" id="state-medusa" data-testid="state-medusa">لم يُفحص</span></div>
+          <table class="settings"><tbody id="settings-medusa"><tr><td colspan="2">جارٍ التحميل…</td></tr></tbody></table>
+          <button id="check-medusa" class="ghost" data-testid="check-medusa">فحص الاتصال</button>
+          <div class="result" id="result-medusa" data-testid="result-medusa"></div>
+        </div>
+      </div>
+
+      <div class="panel" data-testid="company-panel">
+        <h2>الشركة</h2>
+        <p class="hint">الشركة في Business Central التي يعمل عليها الوسيط. تغييرها يمسح ربط المستودعات وطرق الدفع.</p>
+        <div class="row" style="margin-top:12px">
+          <select id="company" data-testid="company"><option value="">— اختر الشركة —</option></select>
+          <button id="load-companies" class="ghost" data-testid="load-companies">تحديث القائمة</button>
+          <button id="save-company" data-testid="save-company" disabled>حفظ الشركة</button>
+        </div>
+        <p class="hint" id="company-current" data-testid="company-current"></p>
+        <div class="result" id="result-company" data-testid="result-company"></div>
+      </div>
+
+      <div class="panel" data-testid="posting-panel">
+        <h2>Posting groups وصفحات BC</h2>
+        <div class="fields">
+          <div><label for="vat_bus_posting_group"><bdi>Store VAT Bus. Post. Gr.</bdi></label><input id="vat_bus_posting_group" data-testid="vat-bus" placeholder="DOMESTIC"></div>
+          <div><label for="gen_bus_posting_group"><bdi>Gen. Business Posting Group</bdi></label><input id="gen_bus_posting_group" data-testid="gen-bus" placeholder="DOMESTIC"></div>
+          <div><label for="price_list_service"><bdi>Sales Price Lists (7016) web service</bdi></label><input id="price_list_service" data-testid="price-list-service"></div>
+          <div><label for="price_list_line_service"><bdi>Price List Lines (7001) web service</bdi></label><input id="price_list_line_service" data-testid="price-list-line-service"></div>
+          <div><label for="inventory_service"><bdi>Item Ledger Entries (38) web service</bdi></label><input id="inventory_service" data-testid="inventory-service"></div>
+        </div>
+        <p class="hint">مجموعة VAT تحدد قوائم الأسعار الشاملة للضريبة المقبولة للمتجر، والمجموعة العامة محفوظة للمستندات. الصفحات تُنشر في BC من Web Services؛ الاسم الفارغ = الاسم الظاهر.</p>
+        <div class="row" style="margin-top:12px"><button id="save-settings" data-testid="save-settings">حفظ</button></div>
+        <div class="result" id="result-settings" data-testid="result-settings"></div>
+      </div>
+      <div class="panel" data-testid="price-lists-panel">
+        <h2>قوائم الأسعار</h2>
+        <p class="hint">قوائم أسعار البيع (Sales Price Lists) في BC التي تنقلها مزامنة المنتجات إلى Medusa كقوائم أسعار (Price lists).
+          القائمة التي لم تعد تُنقل تتحول في Medusa إلى draft. القوائم الموقوفة، أو قوائم الشراء، أو الشاملة للضريبة لمجموعة VAT غير مجموعة المتجر لا تُنقل أبدًا.</p>
+        <label class="check"><input type="radio" name="price_list_mode" value="all" data-testid="price-lists-all"> كل قوائم البيع النشطة</label>
+        <label class="check"><input type="radio" name="price_list_mode" value="chosen" data-testid="price-lists-chosen"> القوائم المختارة فقط</label>
+        <div class="row" style="margin-top:12px"><button id="load-price-lists" class="ghost" data-testid="load-price-lists">عرض القوائم من BC</button></div>
+        <div id="price-lists" data-testid="price-lists"></div>
+        <div class="row" style="margin-top:12px"><button id="save-price-lists" data-testid="save-price-lists">حفظ قوائم الأسعار</button></div>
+        <div class="result" id="result-price-lists" data-testid="result-price-lists"></div>
+      </div>
+      <footer>بيانات الاتصال من Cloudflare: Workers &amp; Pages ← medusa-bc ← Settings ← Variables and Secrets. الأسرار لا تظهر هنا أبدًا.</footer>
+    </section>
+
+    <!-- ===== Mappings (filled by the same code) ===== -->
+    <section data-view="locations" data-testid="view-locations" hidden>
+      <div class="panel" data-mapping="locations">
+        <h2>ربط المستودعات</h2>
+        <p class="hint">كل مستودع (Stock location) في Medusa يُربط بمستودع (Location) واحد في Business Central.</p>
+        <div data-body></div>
+      </div>
+    </section>
+    <section data-view="payments" data-testid="view-payments" hidden>
+      <div class="panel" data-mapping="payments">
+        <h2>طرق الدفع</h2>
+        <p class="hint">كل طريقة دفع (Payment provider) في Medusa تُربط بطريقة دفع (Payment method) في Business Central، وهي التي يسجّلها BC للطلبات المدفوعة بها.</p>
+        <div data-body></div>
+      </div>
+    </section>
+
+    <!-- ===== Syncs (run button + history, filled by the same code) ===== -->
+    <section data-view="items" data-testid="view-items" hidden>
+      <!-- Sub-tabs: the full item sync, or categories only. -->
+      <div class="subtabs" role="tablist">
+        <button class="subtab" role="tab" data-sub="items" aria-selected="true" data-testid="sub-items">المنتجات</button>
+        <button class="subtab" role="tab" data-sub="categories" aria-selected="false" data-testid="sub-categories">الفئات</button>
+        <button class="subtab" role="tab" data-sub="images" aria-selected="false" data-testid="sub-images">الصور</button>
+      </div>
+
+      <div data-subview="items">
+        <div class="panel" data-testid="options-panel">
+          <h2>خيارات المزامنة</h2>
+          <p class="hint">BC هو الأصل: أي منتج في Medusa لا يطابق معرّفه (handle) صنفًا في BC يتحول إلى draft دائمًا.</p>
+          <label class="check"><input type="checkbox" id="skip_blocked" data-testid="opt-skip-blocked">
+            الأصناف المحظورة (Blocked) في BC لا تُستورد <span class="notice">— وإن أُلغي الخيار تُستورد كـ draft</span></label>
+          <label class="check"><input type="checkbox" id="draft_zero_inventory" data-testid="opt-draft-zero">
+            الصنف الذي مخزونه في BC صفر يتحول إلى draft <span class="notice">— مجموع مخزون الصنف في كل مستودعات BC</span></label>
+          <div class="row" style="margin-top:12px"><button id="save-options" data-testid="save-options">حفظ الخيارات</button></div>
+          <div class="result" id="result-options" data-testid="result-options"></div>
+        </div>
+        <div class="panel">
+          <h2>مزامنة المنتجات</h2>
+          <p class="hint">
+            تستورد من الشركة المختارة: الفئات، والأصناف غير المحظورة مع المتغيرات وسعر الوحدة، وقوائم أسعار البيع النشطة.
+            المنتجات الجديدة تُنشأ مسودة (draft)، والإعادة تحدّث ولا تكرر. <strong>أي منتج في Medusa لا يطابق معرّفه (handle)
+            صنفًا في BC يتحول إلى draft</strong>، أيًا كان مصدره. خيارات الأصناف المحظورة والمخزون الصفري أعلاه، واختيار قوائم الأسعار في الإعدادات.
+            الصنف الذي رقمه مستعمل لمنتج آخر لا يُعدَّل ويُذكر. تعمل في الخادم خطوة خطوة، ولا تحتاج بقاء الصفحة مفتوحة.
+          </p>
+          <div class="row" style="margin-top:12px">
+            <button data-run="items" data-testid="run-items">بدء المزامنة</button>
+            <span class="notice" data-notice="items"></span>
+          </div>
+          <div class="result" data-result="items" data-testid="result-items"></div>
+        </div>
+        <div class="panel">
+          <h2>السجل</h2>
+          <p class="notice" data-counter="items"></p>
+          <div data-runs="items" data-testid="runs-items"><p class="notice">لا يوجد تشغيل بعد.</p></div>
+        </div>
+      </div>
+
+      <div data-subview="categories" hidden>
+        <div class="panel">
+          <h2>مزامنة الفئات</h2>
+          <p class="hint">
+            تسحب فئات الأصناف (Item Categories) من الشركة المختارة وتضيفها إلى Medusa، بدون المنتجات.
+            الفئة الجديدة تُنشأ، والموجودة يتحدث اسمها إن تغيّر في BC، ولا تتكرر. الأكواد العربية تأخذ معرّفًا ثابتًا.
+            مزامنة المنتجات تعمل هذه الخطوة أيضًا في بدايتها.
+          </p>
+          <div class="row" style="margin-top:12px">
+            <button data-run="categories" data-testid="run-categories">بدء مزامنة الفئات</button>
+            <span class="notice" data-notice="categories"></span>
+          </div>
+          <div class="result" data-result="categories" data-testid="result-categories"></div>
+        </div>
+        <div class="panel">
+          <h2>السجل</h2>
+          <p class="notice" data-counter="categories"></p>
+          <div data-runs="categories" data-testid="runs-categories"><p class="notice">لا يوجد تشغيل بعد.</p></div>
+        </div>
+      </div>
+
+      <div data-subview="images" hidden>
+        <div class="panel">
+          <h2>نقل الصور</h2>
+          <p class="hint">
+            تنقل صورة كل صنف من BC (Item Picture) إلى منتجه في Medusa، للمنتجات التي أنشأتها مزامنة المنتجات فقط.
+            الصورة تُرفع إلى مخزن ملفات Medusa وتصير الصورة الأولى، والصورة المصغّرة إن لم يُختر غيرها. الصور المضافة في Medusa تبقى.
+            الصورة التي لم تتغير في BC لا تُرفع مرة ثانية، والصورة المحذوفة من BC تُحذف من المنتج. شغّلها بعد مزامنة المنتجات.
+          </p>
+          <div class="row" style="margin-top:12px">
+            <button data-run="images" data-testid="run-images">بدء نقل الصور</button>
+            <span class="notice" data-notice="images"></span>
+          </div>
+          <div class="result" data-result="images" data-testid="result-images"></div>
+        </div>
+        <div class="panel">
+          <h2>السجل</h2>
+          <p class="notice" data-counter="images"></p>
+          <div data-runs="images" data-testid="runs-images"><p class="notice">لا يوجد تشغيل بعد.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <section data-view="inventory" data-testid="view-inventory" hidden>
+      <div class="panel">
+        <h2>مزامنة المخزون</h2>
+        <p class="hint">
+          تضع في كل مستودع Medusa <strong>مربوط</strong> (تبويب ربط المستودعات) كمية كل صنف كما هي في مستودع BC المقابل:
+          مجموع قيود «Item Ledger Entries» (صفحة 38 منشورة في Web Services). يشمل كل متغير في Medusa رقمه (SKU) موجود في BC.
+          ما لا رصيد له في BC يصير 0، والسالب يصير 0 مع ملاحظة. المستودعات غير المربوطة والمنتجات التي ليست في BC لا تُلمس.
+          المتغير الذي لا يتتبع مخزونًا يُنشأ له عنصر مخزون ويُفعَّل تتبعه.
+        </p>
+        <div class="row" style="margin-top:12px">
+          <button data-run="inventory" data-testid="run-inventory">بدء مزامنة المخزون</button>
+          <span class="notice" data-notice="inventory"></span>
+        </div>
+        <div class="result" data-result="inventory" data-testid="result-inventory"></div>
+      </div>
+      <div class="panel">
+        <h2>السجل</h2>
+        <p class="notice" data-counter="inventory"></p>
+        <div data-runs="inventory" data-testid="runs-inventory"><p class="notice">لا يوجد تشغيل بعد.</p></div>
+      </div>
+    </section>
+
+    <section data-view="customers" data-testid="view-customers" hidden>
+      <div class="panel">
+        <h2>نقل العملاء</h2>
+        <p class="hint">
+          ينقل <strong>كل</strong> عملاء BC إلى Medusa (المحظورون أيضًا، وحالة الحظر في metadata): الاسم (الشخص يُقسَم إلى اسم أول وأخير،
+          والشركة تبقى اسم شركة)، الجوال، البريد، وعنوان واحد باسم «Business Central». العميل مربوط برقمه في BC
+          (<bdi class="mono">metadata.bc_customer_number</bdi>)، فالتشغيل الثاني يحدّث ولا يكرر، والعملاء الذين لم يأتوا من BC لا يُلمسون.
+          Medusa لا يقبل بريدًا واحدًا لعميلين: البريد المستعمل عند عميل آخر أو غير الصالح يُترك ويظهر في الملاحظات لتعالجه.
+        </p>
+        <div class="row" style="margin-top:12px">
+          <button data-run="customers" data-testid="run-customers">بدء نقل العملاء</button>
+          <span class="notice" data-notice="customers"></span>
+        </div>
+        <div class="result" data-result="customers" data-testid="result-customers"></div>
+      </div>
+      <div class="panel">
+        <h2>السجل</h2>
+        <p class="notice" data-counter="customers"></p>
+        <div data-runs="customers" data-testid="runs-customers"><p class="notice">لا يوجد تشغيل بعد.</p></div>
+      </div>
+    </section>
   </main>
+
   <script>
-    const grid = document.getElementById("grid");
-    const more = document.getElementById("more");
-    const status = document.getElementById("status");
-    const countEl = document.getElementById("count");
-    const fmt = (amount, currency) =>
-      new Intl.NumberFormat("ar-SA", { style: "currency", currency: (currency || "sar").toUpperCase() }).format(amount);
+    const $ = (id) => document.getElementById(id);
+    const escape = (text) => String(text ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+    const show = (box, ok, html) => { box.innerHTML = html; box.className = `result ${ok ? "ok" : "err"}`; };
 
-    let offset = 0, query = "";
-
-    async function load(reset) {
-      if (reset) { offset = 0; grid.replaceChildren(); }
-      more.hidden = true;
-      status.hidden = false;
-      status.textContent = "جاري التحميل…";
-      try {
-        const res = await fetch(`/api/products?offset=${offset}&q=${encodeURIComponent(query)}`);
-        if (!res.ok) throw new Error(res.status);
-        const data = await res.json();
-        for (const p of data.products) grid.append(card(p));
-        offset += data.products.length;
-        countEl.textContent = `${data.count.toLocaleString("ar-SA")} منتج`;
-        status.hidden = data.count > 0;
-        status.textContent = "لا توجد منتجات";
-        more.hidden = offset >= data.count;
-      } catch {
-        status.textContent = "تعذر تحميل المنتجات، حاول مرة ثانية.";
-      }
-    }
-
-    function card(p) {
-      const el = document.createElement("article");
-      el.className = "card";
-      const img = document.createElement("img");
-      img.loading = "lazy";
-      img.alt = p.title;
-      if (p.thumbnail) img.src = p.thumbnail;
-      const body = document.createElement("div");
-      body.className = "body";
-      const h = document.createElement("h2");
-      h.textContent = p.title;
-      body.append(h);
-      if (p.price != null) {
-        const price = document.createElement("span");
-        price.className = "price";
-        price.textContent = fmt(p.price, p.currency);
-        body.append(price);
-      }
-      el.append(img, body);
-      return el;
-    }
-
-    more.addEventListener("click", () => load(false));
-    document.getElementById("search").addEventListener("submit", (e) => {
-      e.preventDefault();
-      query = e.target.q.value.trim();
-      load(true);
+    // ---- API: optional token, asked for only when the Worker answers 401 ----
+    const KEY = "medusa-bc-token";
+    try { $("token").value = sessionStorage.getItem(KEY) ?? ""; } catch {}
+    class Locked extends Error {}
+    const api = async (path, body) => {
+      const token = $("token").value.trim();
+      const res = await fetch(`/api/middleware/${path}`, {
+        method: body ? "POST" : "GET",
+        headers: { ...(token ? { authorization: `Bearer ${token}` } : {}), ...(body ? { "content-type": "application/json" } : {}) },
+        body: body ? JSON.stringify(body) : undefined,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 401) { $("lock").hidden = false; throw new Locked(token ? "التوكن غير صحيح." : "اكتب توكن الوسيط."); }
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      return data;
+    };
+    $("unlock").addEventListener("click", () => {
+      try { sessionStorage.setItem(KEY, $("token").value.trim()); } catch {}
+      $("lock").hidden = true;
+      loadSettings().then(showTab);
     });
-    load(true);
+
+    // ---- Tabs: the hash picks the section ----
+    const loaders = {};
+    const showTab = () => {
+      const links = [...document.querySelectorAll("nav a[data-tab]")];
+      const wanted = location.hash.slice(1);
+      const current = links.some((l) => l.dataset.tab === wanted) ? wanted : links[0].dataset.tab;
+      for (const link of links) link.dataset.tab === current ? link.setAttribute("aria-current", "page") : link.removeAttribute("aria-current");
+      for (const view of document.querySelectorAll("[data-view]")) view.hidden = view.dataset.view !== current;
+      loaders[current]?.();
+    };
+    addEventListener("hashchange", showTab);
+
+    // ---- Settings tab ----
+    const FIELDS = ["vat_bus_posting_group", "gen_bus_posting_group", "price_list_service", "price_list_line_service", "inventory_service"];
+    let saved = {};
+    let medusaUrl = "";
+    const renderEnv = (target, rows) => {
+      $(target).innerHTML = rows.map((row) => `
+        <tr><td class="k">${escape(row.name)}</td>
+        <td class="v">${row.set ? '<span class="tag set">مضبوط</span>' : '<span class="tag missing">ناقص</span>'}
+          ${!row.secret && row.value ? " " + escape(row.value) : ""}${row.secret && row.set ? " (سرّي)" : ""}</td></tr>`).join("");
+    };
+    const syncSaveButton = () => { $("save-company").disabled = !$("company").value || $("company").value === saved.company_id; };
+    const renderCompanies = (companies) => {
+      $("company").innerHTML = `<option value="">— اختر الشركة —</option>` +
+        companies.map((c) => `<option value="${escape(c.id)}" ${c.id === saved.company_id ? "selected" : ""}>${escape(c.displayName)}</option>`).join("");
+      syncSaveButton();
+    };
+    // Until BC's list is loaded, the saved company is the one option shown.
+    const showSavedCompanyOption = () => {
+      if ($("company").options.length > 1 || !saved.company_id) return;
+      renderCompanies([{ id: saved.company_id, displayName: saved.company_display_name || saved.company_name }]);
+    };
+    const showCompany = () => {
+      $("company-current").textContent = saved.company_id ? `المحفوظة: ${saved.company_display_name || saved.company_name}` : "لم تُختر شركة بعد. افحص اتصال Business Central لتظهر الشركات.";
+    };
+
+    const loadSettings = async () => {
+      try {
+        const data = await api("status");
+        saved = data.saved;
+        renderEnv("settings-bc", data.settings.bc);
+        renderEnv("settings-medusa", data.settings.medusa);
+        medusaUrl = (data.settings.medusa.find((s) => s.name === "MEDUSA_BACKEND_URL")?.value ?? "").replace(/\/+$/, "");
+        for (const key of FIELDS) $(key).value = saved[key] ?? "";
+        showSavedCompanyOption();
+        // Unset means on; "0" is off.
+        for (const key of ["skip_blocked", "draft_zero_inventory"]) $(key).checked = saved[key] !== "0";
+        $("price_list_service").placeholder = data.defaults.price_list_service;
+        $("price_list_line_service").placeholder = data.defaults.price_list_line_service;
+        $("inventory_service").placeholder = data.defaults.inventory_service;
+        chosenLists = parseChosen(saved.price_lists);
+        document.querySelector(`[name=price_list_mode][value=${chosenLists ? "chosen" : "all"}]`).checked = true;
+        showCompany();
+      } catch (error) {
+        if (!(error instanceof Locked)) show($("result-bc"), false, escape(`تعذّر قراءة الإعدادات: ${error.message}`));
+      }
+    };
+
+    const check = (side) => async () => {
+      const state = $(`state-${side}`);
+      state.textContent = "جارٍ الفحص…"; state.className = "state";
+      try {
+        const result = await api(`check/${side}`, {});
+        show($(`result-${side}`), result.ok, `<bdi>${escape(result.message)}</bdi>`);
+        state.textContent = result.ok ? "متصل" : (result.companies ? "اختر الشركة" : "غير متصل");
+        state.className = `state ${result.ok ? "ok" : result.companies ? "warn" : "err"}`;
+        if (result.companies) renderCompanies(result.companies);
+      } catch (error) {
+        show($(`result-${side}`), false, escape(error.message));
+        state.textContent = "غير متصل"; state.className = "state err";
+      }
+    };
+    $("check-bc").addEventListener("click", check("bc"));
+    $("check-medusa").addEventListener("click", check("medusa"));
+    $("load-companies").addEventListener("click", check("bc"));
+    $("company").addEventListener("change", syncSaveButton);
+
+    $("save-company").addEventListener("click", async () => {
+      const chosen = $("company").selectedOptions[0]?.textContent;
+      if (saved.company_id && !confirm(`تغيير الشركة إلى «${chosen}» يمسح ربط المستودعات وطرق الدفع. متابعة؟`)) return;
+      try {
+        const result = await api("company", { company_id: $("company").value });
+        saved = result.settings;
+        showCompany();
+        syncSaveButton();
+        show($("result-company"), true, escape(`حُفظت الشركة «${saved.company_display_name}».${result.cleared ? " مُسح الربط السابق." : ""}`));
+        check("bc")();
+      } catch (error) {
+        show($("result-company"), false, escape(error.message));
+      }
+    });
+
+    $("save-settings").addEventListener("click", async () => {
+      try {
+        saved = (await api("settings", Object.fromEntries(FIELDS.map((k) => [k, $(k).value])))).saved;
+        show($("result-settings"), true, "حُفظ.");
+      } catch (error) {
+        show($("result-settings"), false, escape(error.message));
+      }
+    });
+
+    // ---- Price lists: "" = every active sales list, else a JSON array of chosen codes ----
+    let chosenLists = null;
+    let bcLists = null;
+    const parseChosen = (value) => {
+      try { const codes = value ? JSON.parse(value) : null; return Array.isArray(codes) ? new Set(codes) : null; } catch { return null; }
+    };
+    const dateOnly = (value) => (value && !value.startsWith("0001") ? value.slice(0, 10) : "—");
+    const renderPriceLists = () => {
+      const box = $("price-lists");
+      if (!bcLists) { box.innerHTML = ""; return; }
+      if (!bcLists.length) { box.innerHTML = `<p class="notice">لا توجد قوائم أسعار في BC.</p>`; return; }
+      const all = document.querySelector("[name=price_list_mode]:checked")?.value !== "chosen";
+      box.innerHTML = `<table class="issues"><thead><tr><th></th><th>الكود</th><th>الوصف</th><th>العملة</th><th>من</th><th>إلى</th><th>الحالة</th></tr></thead><tbody>${bcLists.map((l) => `
+        <tr><td><input type="checkbox" data-list="${escape(l.code)}" ${!l.importable ? "disabled" : ""} ${l.importable && (all || chosenLists?.has(l.code)) ? "checked" : ""} ${all ? "disabled" : ""} aria-label="${escape(l.code)}"></td>
+        <td class="mono">${escape(l.code)}</td><td>${escape(l.description)}</td><td class="mono">${escape(l.currency || "—")}</td>
+        <td class="mono nowrap">${dateOnly(l.starts)}</td><td class="mono nowrap">${dateOnly(l.ends)}</td>
+        <td>${l.importable ? `<span class="state ok">متاحة</span>` : `<span class="notice"><bdi>${escape(l.reason ?? l.status)}</bdi></span>`}</td></tr>`).join("")}</tbody></table>`;
+    };
+    for (const radio of document.querySelectorAll("[name=price_list_mode]")) {
+      radio.addEventListener("change", () => {
+        // Switching to "chosen" starts from what was saved, or from every importable list.
+        if (radio.value === "chosen" && !chosenLists && bcLists) chosenLists = new Set(bcLists.filter((l) => l.importable).map((l) => l.code));
+        renderPriceLists();
+      });
+    }
+    $("load-price-lists").addEventListener("click", async () => {
+      $("load-price-lists").disabled = true;
+      try {
+        bcLists = (await api("price-lists")).price_lists;
+        renderPriceLists();
+        $("result-price-lists").className = "result";
+      } catch (error) {
+        show($("result-price-lists"), false, escape(error.message));
+      } finally {
+        $("load-price-lists").disabled = false;
+      }
+    });
+    $("save-price-lists").addEventListener("click", async () => {
+      const all = document.querySelector("[name=price_list_mode]:checked")?.value !== "chosen";
+      if (!all && !bcLists) { show($("result-price-lists"), false, "اعرض القوائم من BC أولًا لتختار منها."); return; }
+      const codes = all ? null : [...document.querySelectorAll("[data-list]:checked")].map((box) => box.dataset.list);
+      try {
+        saved = (await api("settings", { price_lists: codes ? JSON.stringify(codes) : "" })).saved;
+        chosenLists = parseChosen(saved.price_lists);
+        show($("result-price-lists"), true, escape(all ? "حُفظ: كل قوائم البيع النشطة تُنقل في المزامنة القادمة." : `حُفظ: ${codes.length} قائمة تُنقل في المزامنة القادمة.`));
+      } catch (error) {
+        show($("result-price-lists"), false, escape(error.message));
+      }
+    });
+
+    $("save-options").addEventListener("click", async () => {
+      try {
+        saved = (await api("settings", {
+          skip_blocked: $("skip_blocked").checked ? "1" : "0",
+          draft_zero_inventory: $("draft_zero_inventory").checked ? "1" : "0",
+        })).saved;
+        show($("result-options"), true, "حُفظت الخيارات. تُطبَّق في المزامنة القادمة.");
+      } catch (error) {
+        show($("result-options"), false, escape(error.message));
+      }
+    });
+
+    // ---- Mapping tabs (locations, payments) ----
+    const LABELS = {
+      locations: { medusa: "مستودع Medusa", bc: "مستودع Business Central", none: "لا توجد مستودعات في Medusa (Settings ← Locations & Shipping)." },
+      payments: { medusa: "طريقة الدفع في Medusa", bc: "طريقة الدفع في Business Central", none: "لا توجد طرق دفع في Medusa." },
+    };
+    const loadMapping = (kind) => async () => {
+      const body = document.querySelector(`[data-mapping="${kind}"] [data-body]`);
+      const label = LABELS[kind];
+      body.innerHTML = `<p class="notice">جارٍ التحميل…</p>`;
+      let data;
+      try {
+        data = await api(`mappings/${kind}`);
+      } catch (error) {
+        body.innerHTML = `<p class="error">${escape(error.message)}</p>`;
+        return;
+      }
+      const savedCodes = new Map(data.saved.map((m) => [m.id, m.code]));
+      const bcCodes = new Set(data.bc.map((b) => b.code));
+      const errors = [data.errors.bc && `Business Central: ${data.errors.bc}`, data.errors.medusa && `Medusa: ${data.errors.medusa}`].filter(Boolean);
+      const rows = data.medusa.map((m) => {
+        const code = savedCodes.get(m.id) ?? "";
+        // A saved code BC no longer returns stays visible, flagged.
+        const missing = code && !bcCodes.has(code);
+        return `<tr><td>${escape(m.name)}</td><td>
+          <select data-id="${escape(m.id)}" data-testid="map-${kind}-${escape(m.id)}">
+            <option value="">غير مربوط</option>
+            ${missing ? `<option value="${escape(code)}" selected>${escape(code)} (غير موجود في BC)</option>` : ""}
+            ${data.bc.map((b) => `<option value="${escape(b.code)}" ${b.code === code ? "selected" : ""}>${escape(b.code)} — ${escape(b.displayName)}</option>`).join("")}
+          </select>${missing ? ' <span class="state warn">غير موجود في BC</span>' : ""}</td></tr>`;
+      }).join("");
+      body.innerHTML = `
+        ${errors.map((e) => `<p class="error">${escape(e)}</p>`).join("")}
+        ${data.medusa.length ? `<table><thead><tr><th>${label.medusa}</th><th>${label.bc}</th></tr></thead><tbody>${rows}</tbody></table>` : `<p class="notice">${label.none}</p>`}
+        <div class="row"><button data-save data-testid="save-${kind}" disabled>حفظ الربط</button><span class="notice" data-changes></span></div>
+        <div class="result" data-result data-testid="result-${kind}"></div>`;
+      const selects = [...body.querySelectorAll("select[data-id]")];
+      const changed = () => selects.filter((s) => s.value !== (savedCodes.get(s.dataset.id) ?? ""));
+      const refresh = () => {
+        const n = changed().length;
+        body.querySelector("[data-save]").disabled = !n;
+        body.querySelector("[data-changes]").textContent = n ? `${n} تغيير غير محفوظ` : "";
+      };
+      selects.forEach((s) => s.addEventListener("change", refresh));
+      body.querySelector("[data-save]").addEventListener("click", async () => {
+        try {
+          const result = await api(`mappings/${kind}`, { mappings: changed().map((s) => ({ id: s.dataset.id, code: s.value || null })) });
+          savedCodes.clear();
+          result.saved.forEach((m) => savedCodes.set(m.id, m.code));
+          refresh();
+          show(body.querySelector("[data-result]"), true, "حُفظ الربط.");
+        } catch (error) {
+          show(body.querySelector("[data-result]"), false, escape(error.message));
+        }
+      });
+    };
+    loaders.locations = loadMapping("locations");
+    loaders.payments = loadMapping("payments");
+
+    // ---- Sync tabs (items, inventory, customers): run button and history ----
+    const SYNCS = {
+      items: {
+        summary: [
+          ["bc_categories", "فئات في BC"], ["categories_created", "فئات أُنشئت"], ["categories_updated", "فئات تغيّر اسمها"],
+          ["bc_items", "أصناف في BC (غير محظورة)"], ["bc_variants", "متغيرات في BC"],
+          ["products_created", "منتجات أُنشئت (draft)"], ["products_updated", "منتجات حُدّثت"], ["products_skipped", "أصناف تُخطيت"],
+          ["products_drafted", "منتجات تحولت إلى draft (handle غير موجود في BC)"],
+          ["products_drafted_blocked", "تحولت إلى draft (محظورة في BC)"],
+          ["products_drafted_zero_inventory", "تحولت إلى draft (مخزونها في BC صفر)"],
+          ["bc_price_lists", "قوائم أسعار في BC"], ["price_lists_created", "قوائم أُنشئت"], ["price_lists_updated", "قوائم حُدّثت"],
+          ["price_lists_deactivated", "قوائم أُوقفت"], ["price_list_prices", "أسعار في القوائم"], ["barcode_conflicts", "باركود مكرر (لم تُنشأ أو تُحدّث)"], ["issues", "ملاحظات"],
+        ],
+        stages: { read: "قراءة BC", categories: "الفئات", products: "المنتجات", toDraft: "غير الموجودة في BC", priceListsRead: "قراءة قوائم الأسعار", variantIds: "ربط المتغيرات", priceLists: "قوائم الأسعار" },
+      },
+      categories: {
+        summary: [["bc_categories", "فئات في BC"], ["categories_created", "فئات أُنشئت"], ["categories_updated", "فئات تغيّر اسمها"], ["issues", "ملاحظات"]],
+        stages: { read: "قراءة BC", categories: "الفئات" },
+      },
+      images: {
+        summary: [
+          ["products", "منتجات من BC"], ["uploaded", "صور نُقلت"], ["unchanged", "بلا تغيير"], ["no_picture", "بلا صورة في BC"],
+          ["removed", "صور حُذفت (حُذفت من BC)"], ["failed", "فشل نقلها"], ["issues", "ملاحظات"],
+        ],
+        stages: { read: "قراءة المنتجات", pictures: "الصور" },
+      },
+      inventory: {
+        summary: [
+          ["locations", "مستودعات مربوطة"], ["bc_skus", "أصناف في BC"], ["bc_entries", "قيود مخزون مقروءة"],
+          ["variants", "متغيرات Medusa موجودة في BC"], ["bc_skus_not_in_medusa", "أصناف BC غير موجودة في Medusa"],
+          ["inventory_items_created", "عناصر مخزون أُنشئت"], ["levels_created", "أرصدة مستودعات أُنشئت"],
+          ["levels_updated", "أرصدة تغيّرت"], ["levels_unchanged", "أرصدة بلا تغيير"], ["issues", "ملاحظات"],
+        ],
+        stages: { read: "قراءة BC", variants: "مطابقة المتغيرات", track: "عناصر المخزون", levels: "الأرصدة" },
+      },
+      customers: {
+        summary: [
+          ["bc_customers", "عملاء في BC"], ["created", "عملاء أُنشئوا"], ["updated", "عملاء حُدّثوا"], ["unchanged", "بلا تغيير"],
+          ["email_left_out", "بريد تُرك (مستعمل عند عميل آخر)"], ["failed", "فشل نقلهم"], ["issues", "ملاحظات"],
+        ],
+        stages: { read: "قراءة BC", index: "قراءة عملاء Medusa", match: "المطابقة", write: "الكتابة" },
+      },
+    };
+    const STATUS = { running: ["جارٍ", "warn"], succeeded: ["نجحت", "ok"], failed: ["فشلت", "err"] };
+    const polling = {};
+    const lastIssues = {};
+    // Every note of the latest run as CSV (UTF-8 with BOM so Excel reads Arabic).
+    const downloadCsv = (kind) => {
+      const cell = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+      const rows = [["kind", "ref", "item_title", "barcode", "existing_product", "existing_sku", "message"]].concat(
+        (lastIssues[kind] ?? []).map((i) => [i.kind, i.ref, i.item_title, i.barcode, i.existing?.title, i.existing?.sku, i.message]),
+      );
+      const blob = new Blob(["\ufeff" + rows.map((r) => r.map(cell).join(",")).join("\r\n")], { type: "text/csv;charset=utf-8" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = `medusa-bc-${kind}-notes.csv`;
+      link.click();
+      URL.revokeObjectURL(link.href);
+    };
+    document.addEventListener("click", (event) => {
+      const kind = event.target.closest?.("[data-csv]")?.dataset.csv;
+      if (kind) downloadCsv(kind);
+    });
+    const when = (iso) => new Date(iso).toLocaleString("ar-SA-u-nu-latn-ca-gregory", { dateStyle: "medium", timeStyle: "medium" });
+    const duration = (from, to) => {
+      const s = Math.max(0, Math.round(((to ? Date.parse(to) : Date.now()) - Date.parse(from)) / 1000));
+      return s < 60 ? `${s} ث` : s < 3600 ? `${Math.floor(s / 60)} د ${s % 60} ث` : `${Math.floor(s / 3600)} س ${Math.floor((s % 3600) / 60)} د`;
+    };
+    const renderRuns = (kind, runs, total) => {
+      const box = document.querySelector(`[data-runs="${kind}"]`);
+      const counter = document.querySelector(`[data-counter="${kind}"]`);
+      const last = runs.find((r) => r.finished_at);
+      counter.innerHTML = `عدد المزامنات: <strong data-testid="count-${kind}">${total}</strong>${last ? ` — آخر مزامنة انتهت: <bdi>${escape(when(last.finished_at))}</bdi>` : ""}`;
+      if (!runs.length) { box.innerHTML = `<p class="notice">لا يوجد تشغيل بعد.</p>`; return; }
+      const { summary: labels, stages } = SYNCS[kind];
+      box.innerHTML = runs.map((run, index) => {
+        const [text, cls] = STATUS[run.status] ?? [run.status, ""];
+        const summary = index === 0 ? labels.filter(([k]) => run.summary[k] !== undefined)
+          .map(([k, l]) => `<tr><td>${l}</td><td>${escape(run.summary[k])}</td></tr>`).join("") : "";
+        const barcodes = index === 0 ? run.issues.filter((i) => i.kind === "barcode") : [];
+        const others = index === 0 ? run.issues.filter((i) => i.kind !== "barcode") : [];
+        // Duplicate barcodes are fixed by hand, so they get their own list with what that needs.
+        const barcodeList = barcodes.length ? `<details open data-testid="barcode-list"><summary>باركود مكرر — يحتاج معالجة يدوية (${barcodes.length})</summary>
+          <table class="issues"><thead><tr><th>الصنف في BC</th><th>الاسم</th><th>الباركود</th><th>موجود على منتج في Medusa</th></tr></thead><tbody>${barcodes.map((i) => `
+            <tr><td class="mono">${escape(i.ref)}</td><td>${escape(i.item_title ?? "")}</td><td class="mono">${escape(i.barcode ?? "")}</td>
+            <td>${i.existing ? `${medusaUrl && i.existing.id ? `<a href="${escape(medusaUrl)}/app/products/${escape(i.existing.id)}" target="_blank" rel="noopener">${escape(i.existing.title)}</a>` : escape(i.existing.title)} <span class="mono notice">${escape(i.existing.sku ?? "")}</span>` : "غير معروف"}</td></tr>`).join("")}
+          </tbody></table></details>` : "";
+        const issues = others.length ? `<details><summary>الملاحظات (${others.length})</summary><ul>${others
+          .map((i) => `<li><span class="mono">${escape(i.ref)}</span>: <bdi>${escape(i.message)}</bdi></li>`).join("")}</ul></details>` : "";
+        const download = index === 0 && run.issues.length ? `<button class="ghost" data-csv="${kind}" data-testid="csv-${kind}">تنزيل الملاحظات (CSV)</button>` : "";
+        return `<div class="run" ${index === 0 ? `data-testid="last-run-${kind}"` : ""}>
+          <div class="row"><strong class="mono" data-testid="run-number">#${escape(run.number)}</strong>
+          <span class="state ${cls}">${text}${run.status === "running" ? ` — ${stages[run.stage] ?? run.stage}` : ""}</span>
+          <span class="notice">بدأت <bdi>${escape(when(run.started_at))}</bdi>${run.finished_at ? ` · انتهت <bdi>${escape(when(run.finished_at))}</bdi>` : ""} · المدة ${duration(run.started_at, run.finished_at)}</span></div>
+          ${run.error ? `<p class="error"><bdi>${escape(run.error)}</bdi></p>` : ""}
+          ${summary ? `<table class="summary">${summary}</table>` : ""}${barcodeList}${issues}
+          ${download ? `<div class="row" style="margin-top:8px">${download}</div>` : ""}</div>`;
+      }).join("");
+      lastIssues[kind] = runs[0].issues;
+    };
+    const loadRuns = (kind) => async () => {
+      const button = document.querySelector(`[data-run="${kind}"]`);
+      try {
+        const { runs, total } = await api(`${kind}/runs`);
+        renderRuns(kind, runs, total);
+        const running = runs.some((r) => r.status === "running");
+        button.disabled = running;
+        clearTimeout(polling[kind]);
+        // Keeps polling only while this sync's history is on screen.
+        if (running && document.querySelector(`[data-runs="${kind}"]`).offsetParent) polling[kind] = setTimeout(loadRuns(kind), 2000);
+      } catch (error) {
+        if (!(error instanceof Locked)) show(document.querySelector(`[data-result="${kind}"]`), false, escape(error.message));
+      }
+    };
+    // Sub-tabs inside Item sync; the items view shows whichever is selected.
+    const showSub = (sub) => {
+      for (const tab of document.querySelectorAll("[data-sub]")) tab.setAttribute("aria-selected", String(tab.dataset.sub === sub));
+      for (const view of document.querySelectorAll("[data-subview]")) view.hidden = view.dataset.subview !== sub;
+      loaders[`sub-${sub}`]();
+    };
+    for (const tab of document.querySelectorAll("[data-sub]")) tab.addEventListener("click", () => showSub(tab.dataset.sub));
+
+    for (const kind of Object.keys(SYNCS)) {
+      const button = document.querySelector(`[data-run="${kind}"]`);
+      const result = document.querySelector(`[data-result="${kind}"]`);
+      loaders[kind === "inventory" || kind === "customers" ? kind : `sub-${kind}`] = () => {
+        document.querySelector(`[data-notice="${kind}"]`).textContent = saved.company_id
+          ? `الشركة: ${saved.company_display_name || saved.company_name}`
+          : "اختر الشركة في الإعدادات أولًا.";
+        loadRuns(kind)();
+      };
+      button.addEventListener("click", async () => {
+        button.disabled = true;
+        try {
+          await api(`${kind}/run`, {});
+          result.className = "result";
+          loadRuns(kind)();
+        } catch (error) {
+          show(result, false, escape(error.message));
+          button.disabled = false;
+        }
+      });
+    }
+
+    loaders.items = () => showSub(document.querySelector('[data-sub][aria-selected="true"]').dataset.sub);
+
+    loadSettings().then(showTab);
   </script>
 </body>
 </html>
