@@ -144,6 +144,11 @@ list pages over OData.
 | Idempotent | Re-running updates, never duplicates. Variant ids are kept (orders reference them). |
 | Metadata | Product/variant: `bc_item_id`, `bc_item_number`, unit of measure, GTIN, posting groups, last modified. |
 
+### 6.1a Category sync
+
+The item sync's first stage on its own (sub-tab "الفئات" under Item sync, run kind `categories`):
+BC's item categories upserted by handle, nothing else touched.
+
 ### 6.2 Inventory sync (BC → Medusa) — `src/sync/inventory.js`
 
 - Source: published **Item Ledger Entries** (page 38). Stock per location = sum of `Remaining_Quantity`

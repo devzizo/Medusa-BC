@@ -20,14 +20,22 @@ const PRODUCT_FIELDS =
 export const DEFAULT_PRICE_LIST_SERVICE = "SalesPriceLists";
 export const DEFAULT_PRICE_LIST_LINE_SERVICE = "PriceListLines";
 
-/** One step. Returns true when the run is finished. */
-export async function runItemSyncStep(ctx, env) {
+/** One step of the item sync. Returns true when the run is finished. */
+export const runItemSyncStep = (ctx, env) =>
+  runSteps(ctx, env, { read, categories, products, toDraft, priceListsRead, variantIds, priceLists });
+
+/**
+ * One step of the category sync: BC's item categories into Medusa and
+ * nothing else, the same upsert by handle the item sync starts with.
+ */
+export const runCategorySyncStep = (ctx, env) => runSteps(ctx, env, { read: readCategories, categories });
+
+async function runSteps(ctx, env, stages) {
   // SYNC_STEP_BUDGET can raise it on a paid plan (1000 subrequests per invocation).
   const budget = makeBudget(Number(env.SYNC_STEP_BUDGET) || BUDGET);
   const medusa = medusaClient(env, budget);
   const bc = bcCredentials(env);
   const { state } = ctx;
-  const stages = { read, categories, products, toDraft, priceListsRead, variantIds, priceLists };
   // Stages run back to back within one step while the budget lasts.
   while (state.stage !== "done" && budget.left() > 5) {
     const before = `${state.stage}:${state.cursor}`;
@@ -78,12 +86,24 @@ async function read({ ctx, medusa, bc, budget }) {
   next(state, "categories");
 }
 
+// The category sync's read: BC's categories only.
+async function readCategories({ ctx, bc, budget }) {
+  const { state, summary, settings } = ctx;
+  if (!settings.company_id) throw new Error("Choose a Business Central company in Settings first.");
+  const bcCategories = await listBcItemCategories(bc, settings.company_id, { budget });
+  summary.bc_categories = bcCategories.length;
+  Object.assign(summary, { categories_created: 0, categories_updated: 0 });
+  ctx.putWork("category", mapCategories(bcCategories).map((category) => ({ key: category.handle, payload: category })));
+  state.afterCategories = "done";
+  next(state, "categories");
+}
+
 // ---- categories: upsert by handle ----
 
 async function categories({ ctx, medusa, budget }) {
   const { state, summary } = ctx;
   const rows = ctx.work("category", state.cursor, 25);
-  if (!rows.length) return next(state, "products");
+  if (!rows.length) return next(state, state.afterCategories ?? "products");
   const { product_categories: existing } = await medusa.get("/admin/product-categories", {
     handle: rows.map((row) => row.key),
     fields: "id,handle,name",

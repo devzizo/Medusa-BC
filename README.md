@@ -12,7 +12,8 @@ The admin page (`public/index.html`, Arabic, RTL) has five tabs, the same tools 
    Post. Gr., Gen. Business Posting Group) and the price list web service names.
 2. **ربط المستودعات (Locations)** — each Medusa stock location → one BC location.
 3. **طرق الدفع (Payment methods)** — each Medusa payment provider → one BC payment method.
-4. **مزامنة الأصناف (Item sync)** — categories, non-blocked items with variants and unit price, and
+4. **مزامنة الأصناف (Item sync)**, with two sub-tabs. **الفئات (Categories)** pulls BC's item categories
+   into Medusa alone (create, rename, never duplicate). **المنتجات (Products)** is the full sync: categories, non-blocked items with variants and unit price, and
    active sales price lists, BC → Medusa. New products are drafts; a clashing SKU is skipped. **Every
    Medusa product that is not in BC becomes a draft**, whoever created it (in BC = made by the sync for
    an item BC still has, or any variant SKU BC has).
@@ -79,7 +80,7 @@ secret is set, in which case every call needs `Authorization: Bearer <token>` an
 | `POST /api/middleware/company` | `{ company_id }` from BC's list; clears both mappings when it changes. |
 | `POST /api/middleware/settings` | Posting groups and price list service names. |
 | `GET/POST /api/middleware/mappings/{locations,payments}` | Both lists live, and the saved mapping; POST `{ mappings: [{ id, code }] }`. |
-| `GET /api/middleware/{items,inventory}/runs`, `POST …/run` | Sync history; start a run (one at a time). |
+| `GET /api/middleware/{items,categories,inventory}/runs`, `POST …/run` | Sync history; start a run (one at a time). |
 
 ## Deploy
 

@@ -61,6 +61,9 @@
     .summary td { padding: 4px 0; }
     .summary td:last-child { text-align: end; font-variant-numeric: tabular-nums; }
     footer { margin-top: 24px; color: var(--muted); font-size: .85rem; }
+    .subtabs { display: flex; gap: 8px; margin-bottom: 16px; }
+    .subtab { background: #fff; color: var(--muted); border: 1px solid var(--line); }
+    .subtab[aria-selected="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
   </style>
 </head>
 <body>
@@ -152,23 +155,51 @@
 
     <!-- ===== Syncs (run button + history, filled by the same code) ===== -->
     <section data-view="items" data-testid="view-items" hidden>
-      <div class="panel">
-        <h2>مزامنة الأصناف</h2>
-        <p class="hint">
-          تستورد من الشركة المختارة: الفئات، والأصناف غير المحظورة مع المتغيرات وسعر الوحدة، وقوائم أسعار البيع النشطة.
-          المنتجات الجديدة تُنشأ مسودة (draft)، والإعادة تحدّث ولا تكرر. <strong>أي منتج في Medusa غير موجود في BC</strong>
-          (لا هو من أصناف BC ولا رقم SKU لأي متغير فيه موجود في BC) <strong>يتحول إلى draft</strong>، أيًا كان مصدره.
-          الصنف الذي رقمه مستعمل لمنتج آخر لا يُعدَّل ويُذكر. تعمل في الخادم خطوة خطوة، ولا تحتاج بقاء الصفحة مفتوحة.
-        </p>
-        <div class="row" style="margin-top:12px">
-          <button data-run="items" data-testid="run-items">بدء المزامنة</button>
-          <span class="notice" data-notice="items"></span>
-        </div>
-        <div class="result" data-result="items" data-testid="result-items"></div>
+      <!-- Sub-tabs: the full item sync, or categories only. -->
+      <div class="subtabs" role="tablist">
+        <button class="subtab" role="tab" data-sub="items" aria-selected="true" data-testid="sub-items">المنتجات</button>
+        <button class="subtab" role="tab" data-sub="categories" aria-selected="false" data-testid="sub-categories">الفئات</button>
       </div>
-      <div class="panel">
-        <h2>السجل</h2>
-        <div data-runs="items" data-testid="runs-items"><p class="notice">لا يوجد تشغيل بعد.</p></div>
+
+      <div data-subview="items">
+        <div class="panel">
+          <h2>مزامنة المنتجات</h2>
+          <p class="hint">
+            تستورد من الشركة المختارة: الفئات، والأصناف غير المحظورة مع المتغيرات وسعر الوحدة، وقوائم أسعار البيع النشطة.
+            المنتجات الجديدة تُنشأ مسودة (draft)، والإعادة تحدّث ولا تكرر. <strong>أي منتج في Medusa غير موجود في BC</strong>
+            (لا هو من أصناف BC ولا رقم SKU لأي متغير فيه موجود في BC) <strong>يتحول إلى draft</strong>، أيًا كان مصدره.
+            الصنف الذي رقمه مستعمل لمنتج آخر لا يُعدَّل ويُذكر. تعمل في الخادم خطوة خطوة، ولا تحتاج بقاء الصفحة مفتوحة.
+          </p>
+          <div class="row" style="margin-top:12px">
+            <button data-run="items" data-testid="run-items">بدء المزامنة</button>
+            <span class="notice" data-notice="items"></span>
+          </div>
+          <div class="result" data-result="items" data-testid="result-items"></div>
+        </div>
+        <div class="panel">
+          <h2>السجل</h2>
+          <div data-runs="items" data-testid="runs-items"><p class="notice">لا يوجد تشغيل بعد.</p></div>
+        </div>
+      </div>
+
+      <div data-subview="categories" hidden>
+        <div class="panel">
+          <h2>مزامنة الفئات</h2>
+          <p class="hint">
+            تسحب فئات الأصناف (Item Categories) من الشركة المختارة وتضيفها إلى Medusa، بدون المنتجات.
+            الفئة الجديدة تُنشأ، والموجودة يتحدث اسمها إن تغيّر في BC، ولا تتكرر. الأكواد العربية تأخذ معرّفًا ثابتًا.
+            مزامنة المنتجات تعمل هذه الخطوة أيضًا في بدايتها.
+          </p>
+          <div class="row" style="margin-top:12px">
+            <button data-run="categories" data-testid="run-categories">بدء مزامنة الفئات</button>
+            <span class="notice" data-notice="categories"></span>
+          </div>
+          <div class="result" data-result="categories" data-testid="result-categories"></div>
+        </div>
+        <div class="panel">
+          <h2>السجل</h2>
+          <div data-runs="categories" data-testid="runs-categories"><p class="notice">لا يوجد تشغيل بعد.</p></div>
+        </div>
       </div>
     </section>
 
@@ -388,6 +419,10 @@
         ],
         stages: { read: "قراءة BC", categories: "الفئات", products: "المنتجات", toDraft: "غير الموجودة في BC", priceListsRead: "قراءة قوائم الأسعار", variantIds: "ربط المتغيرات", priceLists: "قوائم الأسعار" },
       },
+      categories: {
+        summary: [["bc_categories", "فئات في BC"], ["categories_created", "فئات أُنشئت"], ["categories_updated", "فئات تغيّر اسمها"], ["issues", "ملاحظات"]],
+        stages: { read: "قراءة BC", categories: "الفئات" },
+      },
       inventory: {
         summary: [
           ["locations", "مستودعات مربوطة"], ["bc_skus", "أصناف في BC"], ["bc_entries", "قيود مخزون مقروءة"],
@@ -425,15 +460,24 @@
         const running = runs.some((r) => r.status === "running");
         button.disabled = running;
         clearTimeout(polling[kind]);
-        if (running && !document.querySelector(`[data-view="${kind}"]`).hidden) polling[kind] = setTimeout(loadRuns(kind), 2000);
+        // Keeps polling only while this sync's history is on screen.
+        if (running && document.querySelector(`[data-runs="${kind}"]`).offsetParent) polling[kind] = setTimeout(loadRuns(kind), 2000);
       } catch (error) {
         if (!(error instanceof Locked)) show(document.querySelector(`[data-result="${kind}"]`), false, escape(error.message));
       }
     };
+    // Sub-tabs inside Item sync; the items view shows whichever is selected.
+    const showSub = (sub) => {
+      for (const tab of document.querySelectorAll("[data-sub]")) tab.setAttribute("aria-selected", String(tab.dataset.sub === sub));
+      for (const view of document.querySelectorAll("[data-subview]")) view.hidden = view.dataset.subview !== sub;
+      loaders[`sub-${sub}`]();
+    };
+    for (const tab of document.querySelectorAll("[data-sub]")) tab.addEventListener("click", () => showSub(tab.dataset.sub));
+
     for (const kind of Object.keys(SYNCS)) {
       const button = document.querySelector(`[data-run="${kind}"]`);
       const result = document.querySelector(`[data-result="${kind}"]`);
-      loaders[kind] = () => {
+      loaders[kind === "inventory" ? kind : `sub-${kind}`] = () => {
         document.querySelector(`[data-notice="${kind}"]`).textContent = saved.company_id
           ? `الشركة: ${saved.company_display_name || saved.company_name}`
           : "اختر الشركة في الإعدادات أولًا.";
@@ -451,6 +495,8 @@
         }
       });
     }
+
+    loaders.items = () => showSub(document.querySelector('[data-sub][aria-selected="true"]').dataset.sub);
 
     loadSettings().then(showTab);
   </script>

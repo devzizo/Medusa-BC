@@ -1,8 +1,8 @@
 import { DurableObject } from "cloudflare:workers";
 import { runInventorySyncStep } from "./sync/inventory.js";
-import { runItemSyncStep } from "./sync/items.js";
+import { runCategorySyncStep, runItemSyncStep } from "./sync/items.js";
 
-const STEPS = { items: runItemSyncStep, inventory: runInventorySyncStep };
+const STEPS = { items: runItemSyncStep, categories: runCategorySyncStep, inventory: runInventorySyncStep };
 
 // All of the middleware's own state, in one Durable Object with SQLite:
 // settings chosen in the page (company, posting groups), the location and
