@@ -31,6 +31,14 @@ The admin page (`public/index.html`, Arabic, RTL) has five tabs, the same tools 
    never duplicates; customers not from BC are never touched). An email another customer already
    holds, or an invalid one, is left out and listed in the notes.
 
+7. **ترحيل الطلبات (Orders)** — a table of Medusa orders, newest first, each with a **Sync** button that
+   posts that one order to BC as a **Sales Order**, by hand only (never automatic). External document
+   number `MED-<order number>`; BC is searched for it first (open sales order or posted invoice), so
+   nothing is posted twice. Customer: the BC customer the customer sync linked, else the default set
+   on the tab. Lines: the BC item and variant the item sync recorded; shipping on a G/L account or
+   item set on the tab. If BC refuses a line, the half-made sales order is deleted and the reason
+   shown; the BC total is compared with Medusa's.
+
 Every sync tab counts its runs (#1, #2…) and shows each run's start, end and duration, and when the
 last one finished.
 
@@ -42,7 +50,7 @@ Code:
 - `src/index.js` — serves the page, routes `/api/middleware/*`, exports the Durable Object.
 - `src/api.js` — the API behind the page.
 - `src/store.js` — Durable Object `MiddlewareStore` (SQLite): settings, mappings, sync runs.
-- `src/sync/items.js`, `src/sync/inventory.js`, `src/sync/customers.js`, `src/sync/images.js` — the syncs, as steps under a subrequest budget
+- `src/sync/items.js`, `src/sync/inventory.js`, `src/sync/customers.js`, `src/sync/images.js` — the syncs, `src/sync/orders.js` posting one order, as steps under a subrequest budget
   driven by alarms.
 - `src/lib/bc.js`, `src/lib/medusa.js`, `src/lib/map.js` — BC client, Medusa Admin client, the pure
   mapping rules; `src/lib/inventory.js` the stock arithmetic, `src/lib/customers.js` the customer mapping (both ported from the plugin, tested
@@ -95,6 +103,8 @@ secret is set, in which case every call needs `Authorization: Bearer <token>` an
 | `POST /api/middleware/check/bc` | Fresh Entra token, BC companies, whether the chosen one is there. |
 | `POST /api/middleware/company` | `{ company_id }` from BC's list; clears both mappings when it changes. |
 | `POST /api/middleware/settings` | Posting groups, page names, chosen price lists (`price_lists`: `""` = all, or a JSON array of codes), item sync options. |
+| `GET /api/middleware/orders?offset=` | 20 Medusa orders, newest first, each with what was posted to BC. |
+| `POST /api/middleware/orders/:id/sync` | Posts that order to BC as a sales order (by hand). |
 | `GET /api/middleware/price-lists` | BC's sales price lists, each with whether the sync can import it and why not. |
 | `GET/POST /api/middleware/mappings/{locations,payments}` | Both lists live, and the saved mapping; POST `{ mappings: [{ id, code }] }`. |
 | `GET /api/middleware/{items,categories,images,inventory,customers}/runs`, `POST …/run` | `{ total, runs }`: the last 10 runs, each with its `number`; start a run (one at a time). |

@@ -57,6 +57,11 @@
     details summary { cursor: pointer; margin-top: 8px; }
     details ul { margin: 8px 0 0; padding-inline-start: 20px; font-size: .85rem; }
     .nowrap { white-space: nowrap; }
+    .scroll { overflow-x: auto; }
+    table.orders { font-size: .85rem; }
+    table.orders td, table.orders th { padding: 8px 8px 8px 0; vertical-align: top; }
+    table.orders button { padding: 6px 14px; }
+    select { max-width: 100%; }
     #price-lists { overflow-x: auto; }
     .run { padding: 12px 0; border-top: 1px solid var(--line); }
     .run:first-of-type { border-top: 0; }
@@ -85,6 +90,7 @@
         <a href="#items" data-tab="items" data-testid="nav-items">مزامنة الأصناف</a>
         <a href="#inventory" data-tab="inventory" data-testid="nav-inventory">مزامنة المخزون</a>
         <a href="#customers" data-tab="customers" data-testid="nav-customers">نقل العملاء</a>
+        <a href="#orders" data-tab="orders" data-testid="nav-orders">ترحيل الطلبات</a>
       </nav>
     </div>
   </header>
@@ -296,6 +302,39 @@
         <h2>السجل</h2>
         <p class="notice" data-counter="customers"></p>
         <div data-runs="customers" data-testid="runs-customers"><p class="notice">لا يوجد تشغيل بعد.</p></div>
+      </div>
+    </section>
+
+    <section data-view="orders" data-testid="view-orders" hidden>
+      <div class="panel" data-testid="order-settings">
+        <h2>إعدادات الترحيل</h2>
+        <p class="hint">كل طلب في Medusa يُرحَّل إلى BC كـ Sales Order <strong>يدويًا بزر Sync</strong> بجانبه، لا تلقائيًا. رقمه في BC الخارجي
+          <bdi class="mono">MED-رقم الطلب</bdi>، ويُبحث عنه في BC قبل الإنشاء (أمر بيع أو فاتورة مرحّلة) فلا يتكرر. العميل هو عميل BC المربوط
+          (من نقل العملاء)، وإلا العميل الافتراضي أدناه. الأصناف من مزامنة الأصناف (رقم الصنف والمتغير). السعر شامل الضريبة أو بدونها حسب عميل BC.
+          إن رفض BC أي سطر يُحذف أمر البيع الناقص ويظهر السبب.</p>
+        <div class="fields">
+          <div><label for="order_customer_number">عميل BC الافتراضي (رقم العميل)</label><input id="order_customer_number" data-testid="order-customer" placeholder="WEB"></div>
+          <div><label for="order_location_code">المستودع الافتراضي في BC</label><select id="order_location_code" data-testid="order-location"><option value="">— بلا مستودع —</option></select></div>
+          <div><label for="order_shipping_type">سطر الشحن في BC</label><select id="order_shipping_type" data-testid="order-shipping-type"><option value="Account">حساب (G/L Account)</option><option value="Item">صنف (Item)</option></select></div>
+          <div><label for="order_shipping_number">رقم حساب أو صنف الشحن</label><input id="order_shipping_number" data-testid="order-shipping-number" placeholder="6810"></div>
+          <div><label for="order_local_currency">عملة BC المحلية</label><input id="order_local_currency" data-testid="order-currency" placeholder="SAR"></div>
+        </div>
+        <p class="hint">المستودع: مستودع التنفيذ في Medusa إن كان مربوطًا (تبويب ربط المستودعات)، وإلا هذا. الطلب بعملة غير المحلية يُرسل بعملته.</p>
+        <div class="row" style="margin-top:12px"><button id="save-order-settings" data-testid="save-order-settings">حفظ</button></div>
+        <div class="result" id="result-order-settings" data-testid="result-order-settings"></div>
+      </div>
+      <div class="panel">
+        <div class="side-head"><h2>طلبات Medusa</h2>
+          <div class="row"><select id="order-filter" data-testid="order-filter" aria-label="تصفية">
+            <option value="all">الكل</option><option value="todo">غير المرحّلة</option><option value="synced">المرحّلة</option><option value="failed">الفاشلة</option></select>
+            <button id="reload-orders" class="ghost" data-testid="reload-orders">تحديث</button></div></div>
+        <div id="orders" class="scroll" data-testid="orders"><p class="notice">جارٍ التحميل…</p></div>
+        <div class="row" style="margin-top:12px">
+          <button id="orders-prev" class="ghost" data-testid="orders-prev">السابق</button>
+          <span class="notice" id="orders-page" data-testid="orders-page"></span>
+          <button id="orders-next" class="ghost" data-testid="orders-next">التالي</button>
+        </div>
+        <div class="result" id="result-orders" data-testid="result-orders"></div>
       </div>
     </section>
   </main>
@@ -694,6 +733,99 @@
     }
 
     loaders.items = () => showSub(document.querySelector('[data-sub][aria-selected="true"]').dataset.sub);
+
+    // ---- Orders → BC sales orders, one by one by hand ----
+    const ORDER_FIELDS = ["order_customer_number", "order_shipping_type", "order_shipping_number", "order_location_code", "order_local_currency"];
+    let orderOffset = 0;
+    let orderPage = null;
+    const money = (amount, currency) => `${Number(amount ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${escape((currency ?? "").toUpperCase())}`;
+    const PAY = { captured: "مدفوع", authorized: "مُفوَّض", not_paid: "غير مدفوع", awaiting: "بانتظار الدفع", refunded: "مسترد", partially_refunded: "مسترد جزئيًا", canceled: "ملغى" };
+    const bcCell = (o) => {
+      const r = o.bc;
+      if (!r) return `<span class="notice">لم يُرحَّل</span>`;
+      if (r.status === "synced") {
+        const off = r.bc_total !== null && r.medusa_total !== null && Math.abs(r.bc_total - r.medusa_total) > 0.05;
+        return `<span class="state ok">مرحّل</span> <span class="mono">${escape(r.bc_order_number)}</span><br><span class="notice">${escape(when(r.at))}</span>${
+          off ? `<br><span class="state warn">إجمالي BC ${money(r.bc_total, o.currency_code)} ≠ Medusa</span>` : ""}`;
+      }
+      if (r.status === "syncing") return `<span class="state warn">جارٍ الترحيل…</span>`;
+      return `<span class="state err">فشل</span> <span class="notice">${escape(when(r.at))}</span><br><bdi class="error">${escape(r.error)}</bdi>`;
+    };
+    const renderOrders = () => {
+      const box = $("orders");
+      const filter = $("order-filter").value;
+      const rows = (orderPage?.orders ?? []).filter((o) =>
+        filter === "all" || (filter === "synced" ? o.bc?.status === "synced" : filter === "failed" ? o.bc?.status === "failed" : o.bc?.status !== "synced"));
+      $("orders-page").textContent = orderPage ? `${orderPage.count ? orderOffset + 1 : 0}–${Math.min(orderOffset + orderPage.limit, orderPage.count)} من ${orderPage.count}` : "";
+      $("orders-prev").disabled = !orderOffset;
+      $("orders-next").disabled = !orderPage || orderOffset + orderPage.limit >= orderPage.count;
+      if (!rows.length) { box.innerHTML = `<p class="notice">لا توجد طلبات${filter === "all" ? "" : " بهذه الحالة في هذه الصفحة"}.</p>`; return; }
+      box.innerHTML = `<table class="orders"><thead><tr><th>الطلب</th><th>التاريخ</th><th>العميل</th><th>الإجمالي</th><th>الدفع</th><th>في BC</th><th></th></tr></thead><tbody>${rows.map((o) => {
+        const name = [o.customer?.first_name, o.customer?.last_name].filter(Boolean).join(" ") || o.customer?.company_name ||
+          [o.shipping_address?.first_name, o.shipping_address?.last_name].filter(Boolean).join(" ") || o.email || "—";
+        const synced = o.bc?.status === "synced";
+        return `<tr data-order="${escape(o.id)}" data-testid="order-row">
+          <td class="mono nowrap">#${escape(o.display_id)}</td>
+          <td class="nowrap">${escape(when(o.created_at))}</td>
+          <td>${escape(name)}${o.customer?.metadata?.bc_customer_number ? `<br><span class="mono notice">${escape(o.customer.metadata.bc_customer_number)}</span>` : ""}</td>
+          <td class="nowrap">${money(o.total, o.currency_code)}</td>
+          <td>${escape(PAY[o.payment_status] ?? o.payment_status ?? "")}${o.status === "canceled" ? ` <span class="state err">ملغى</span>` : ""}</td>
+          <td data-testid="order-bc">${bcCell(o)}</td>
+          <td><button data-sync="${escape(o.id)}" data-testid="order-sync" ${synced ? "disabled" : ""}>${o.bc?.status === "failed" ? "إعادة" : "Sync"}</button></td></tr>`;
+      }).join("")}</tbody></table>`;
+    };
+    const loadOrders = async () => {
+      try {
+        orderPage = await api(`orders?offset=${orderOffset}`);
+        renderOrders();
+        $("result-orders").className = "result";
+      } catch (error) {
+        if (!(error instanceof Locked)) { $("orders").innerHTML = ""; show($("result-orders"), false, escape(error.message)); }
+      }
+    };
+    const loadOrderSettings = async () => {
+      for (const key of ORDER_FIELDS) if ($(key).tagName !== "SELECT") $(key).value = saved[key] ?? "";
+      $("order_shipping_type").value = saved.order_shipping_type || "Account";
+      // The default location is one of the mapped BC locations.
+      try {
+        const { saved: mapped } = saved.company_id ? await api("mappings/locations") : { saved: [] };
+        const codes = [...new Map(mapped.map((m) => [m.code, m.name])).entries()];
+        $("order_location_code").innerHTML = `<option value="">— بلا مستودع —</option>` +
+          codes.map(([code, name]) => `<option value="${escape(code)}">${escape(code)}${name ? ` — ${escape(name)}` : ""}</option>`).join("");
+      } catch {}
+      $("order_location_code").value = saved.order_location_code ?? "";
+    };
+    loaders.orders = () => { loadOrderSettings(); loadOrders(); };
+    $("save-order-settings").addEventListener("click", async () => {
+      try {
+        saved = (await api("settings", Object.fromEntries(ORDER_FIELDS.map((k) => [k, $(k).value.trim()])))).saved;
+        show($("result-order-settings"), true, "حُفظ.");
+      } catch (error) {
+        show($("result-order-settings"), false, escape(error.message));
+      }
+    });
+    $("order-filter").addEventListener("change", renderOrders);
+    $("reload-orders").addEventListener("click", loadOrders);
+    $("orders-prev").addEventListener("click", () => { orderOffset = Math.max(0, orderOffset - 20); loadOrders(); });
+    $("orders-next").addEventListener("click", () => { orderOffset += 20; loadOrders(); });
+    $("orders").addEventListener("click", async (event) => {
+      const button = event.target.closest("[data-sync]");
+      if (!button) return;
+      const order = orderPage.orders.find((o) => o.id === button.dataset.sync);
+      if (!confirm(`ترحيل الطلب #${order.display_id} إلى BC كأمر بيع (Sales Order)؟`)) return;
+      button.disabled = true;
+      button.textContent = "جارٍ…";
+      try {
+        const result = await api(`orders/${encodeURIComponent(order.id)}/sync`, {});
+        order.bc = result.record;
+        show($("result-orders"), result.record.status === "synced", result.record.status === "synced"
+          ? escape(`الطلب #${order.display_id} ${result.linked ? "موجود في BC أصلًا، رُبط بـ" : "رُحّل إلى BC:"} ${result.record.bc_order_number}`)
+          : escape(`لم يُرحَّل الطلب #${order.display_id}: ${result.record.error}`));
+      } catch (error) {
+        show($("result-orders"), false, escape(error.message));
+      }
+      renderOrders();
+    });
 
     loadSettings().then(showTab);
   </script>

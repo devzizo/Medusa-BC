@@ -208,13 +208,29 @@ Sub-tab "الصور" under Item sync, run kind `images`.
 Saving checks both sides against the live lists. Changing `BC_COMPANY_ID` or the BC environment
 clears both mappings (they name another company's codes).
 
-### 6.4 Order export (phase 2, Medusa → BC)
+### 6.4 Order posting (Medusa → BC sales order) — `src/sync/orders.js`, `src/lib/orders.js`
 
-- Trigger: cron polls `GET /admin/orders?updated_at[$gt]=<cursor>`; cursor in the Durable Object.
-- Creates a BC `salesOrders` (or `salesInvoices`) with customer, lines by SKU → item/variant,
-  location from the fulfillment's stock location map, payment method from the payment map, posting
-  groups from settings. Idempotent by `externalDocumentNumber = medusa order display id`.
-- Out of scope until phase 1 is in production.
+By hand only: the Orders tab lists Medusa orders (20 a page, newest first, filter by state) with a
+**Sync** button per order. Nothing is posted automatically.
+
+- Header: `customerNumber` = the customer's `metadata.bc_customer_number` (customer sync), else the
+  default set on the tab; `externalDocumentNumber` = `MED-<display_id>`; `orderDate`; ship-to name,
+  address, phone, email; `currencyCode` only when the order's currency is not BC's local one (SAR).
+- Lines: `lineType Item`, `lineObjectNumber` = variant `metadata.bc_item_number`, `itemVariantId` =
+  `bc_variant_id`, quantity, unit price and discount **including VAT when the BC order's
+  `pricesIncludeTax` is true** (it comes from the BC customer, so lines are priced after the header
+  exists), else excluding it (Medusa's tax lines give the rate). Shipping charged → one line on the
+  G/L account or item set on the tab. `locationId`: the fulfilment location if mapped, else the
+  default location set on the tab.
+- Before BC is touched: every line is checked (an item not from BC, or shipping with nowhere to post,
+  stops the order with the reason). BC is searched for `MED-<n>` among sales orders and posted
+  invoices: found → linked, never duplicated.
+- A refused line → the half-made sales order is deleted (`DELETE` with `If-Match: *`) and the order
+  marked failed with BC's message; "إعادة" retries.
+- State: table `order_sync` (order id, status, BC id and number, BC and Medusa totals, time, error). A
+  claim stops two clicks posting at once. The page flags a BC total that differs from Medusa's.
+- Not sent: payment (API v2.0 sales orders take no payment method; the payment mapping is kept for
+  posting payments later).
 
 ### 6.5 Runs and the admin page
 
@@ -258,7 +274,8 @@ Medusa 2.19 facts that cost time:
   `https://api.businesscentral.dynamics.com/.default`. Cache per (tenant, client, hash(secret)) until
   60 s before expiry; the "check connection" always asks for a fresh one.
 - `GET {env}/api/v2.0/companies`, `/companies({id})/locations | itemCategories | items | itemVariants |
-  paymentMethods | customers`, `items({id})/picture`. Paging via `@odata.nextLink` (absolute URL).
+  paymentMethods | customers`, `items({id})/picture`; writes `salesOrders` and
+  `salesOrders({id})/salesOrderLines` (and reads `salesInvoices`) for order posting. Paging via `@odata.nextLink` (absolute URL).
 - 30 s timeout per call; errors classified: `auth_failed`, `timeout`, `network`, `http_error` with BC's
   own message.
 
