@@ -73,8 +73,10 @@ service that can be deployed, paused and rolled back on its own.
 
 ## 5. Settings (tokens and connection)
 
-All settings come from the Worker environment. Non-secret values may live in `wrangler.jsonc` `vars`;
-secrets only via `wrangler secret put` (production) or `.dev.vars` (local, git-ignored).
+All settings come from the Worker environment, set in the Cloudflare dashboard (Variables and
+Secrets); `wrangler.jsonc` keeps only `MEDUSA_BACKEND_URL` and sets `keep_vars` so deploys never
+overwrite the dashboard. Secrets only as dashboard secrets / `wrangler secret put`, or `.dev.vars`
+locally (git-ignored).
 `.dev.vars.example` in the repo lists every name.
 
 ### 5.1 Medusa
@@ -105,7 +107,7 @@ secrets only via `wrangler secret put` (production) or `.dev.vars` (local, git-i
 
 | Name | Kind | Notes |
 |---|---|---|
-| `MIDDLEWARE_ADMIN_TOKEN` | **secret** | Bearer token every `/api/middleware/*` call needs. Put Cloudflare Access in front of the admin page as well. |
+| `MIDDLEWARE_ADMIN_TOKEN` | **secret**, optional | Extra lock: when set, every `/api/middleware/*` call needs it as a Bearer token and the page asks for it. Unset (the owner's choice), the page relies on Cloudflare Access alone. |
 | `SYNC_ITEMS_CRON`, `SYNC_INVENTORY_CRON` | wrangler `triggers.crons` | e.g. items nightly, inventory every 15 minutes. |
 
 ### 5.4 Settings endpoint
@@ -238,7 +240,8 @@ No id map table is needed in phase 1: BC identity is carried in Medusa handles, 
   API responses (status says *set* / *missing*).
 - Medusa secret key belongs to a dedicated admin user; revoke = cut the integration off.
 - BC app gets read permissions in phase 1; write only when phase 2 starts.
-- All `/api/middleware/*` behind `MIDDLEWARE_ADMIN_TOKEN` and Cloudflare Access.
+- The admin page and `/api/middleware/*` behind Cloudflare Access; `MIDDLEWARE_ADMIN_TOKEN` as an optional
+  second lock. Before any write endpoint (syncs) ships, one of the two must be in place.
 
 ## 10. Acceptance criteria
 

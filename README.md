@@ -17,20 +17,29 @@ Never put the Medusa secret `sk_` key, the BC client secret or the middleware to
 
 ### Settings
 
-Non-secret values are `vars` in `wrangler.jsonc` (`BC_ENVIRONMENT_URL`, `BC_TENANT_ID`, `BC_CLIENT_ID`,
-`BC_COMPANY_ID`, ...). Secrets are set once per environment, never committed:
+All settings live in the Cloudflare dashboard: **Workers & Pages → medusa-bc → Settings → Variables
+and Secrets**. `wrangler.jsonc` sets `keep_vars`, so deploys never overwrite them.
 
-```bash
-npx wrangler secret put MEDUSA_ADMIN_API_KEY   # Medusa Admin > Settings > Secret API Keys (sk_...)
-npx wrangler secret put BC_CLIENT_SECRET       # Entra ID app client secret
-npx wrangler secret put MIDDLEWARE_ADMIN_TOKEN # any long random string
-```
+| Name | Type | Value |
+|---|---|---|
+| `BC_ENVIRONMENT_URL` | Text | `https://api.businesscentral.dynamics.com/v2.0/<tenant>/Production` |
+| `BC_TENANT_ID` | Text | Entra tenant id |
+| `BC_CLIENT_ID` | Text | Entra app (client) id |
+| `BC_CLIENT_SECRET` | Secret | Entra app client secret |
+| `BC_COMPANY_ID` | Text | Company id (the BC check lists them) |
+| `MEDUSA_BACKEND_URL` | Text | Set in `wrangler.jsonc`: `https://hoven-sa.medusajs.app` |
+| `MEDUSA_ADMIN_API_KEY` | Secret | Medusa Admin → Settings → Secret API Keys (`sk_...`) |
+| `MIDDLEWARE_ADMIN_TOKEN` | Secret, optional | Only if the page should ask for a token |
+
+Secrets can also be set with `npx wrangler secret put <NAME>`. Never commit any of them.
 
 Locally, copy `.dev.vars.example` to `.dev.vars` (git-ignored).
 
 ### Check the connection
 
-Open the admin page, or call the API (all need `Authorization: Bearer $MIDDLEWARE_ADMIN_TOKEN`):
+Open the admin page, or call the API. **Protect the page with Cloudflare Access** (Worker → Settings →
+Domains & Routes): the API has no login of its own unless the optional `MIDDLEWARE_ADMIN_TOKEN`
+secret is set, in which case every call needs `Authorization: Bearer <token>` and the page asks for it.
 
 | Route | Does |
 |---|---|

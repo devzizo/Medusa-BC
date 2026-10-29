@@ -22,7 +22,9 @@ It replaces the in-Medusa plugin `@hoven/medusa-bc` (repo `devzizo/essentials-st
 ## Settings and tokens
 
 - Every setting is in the Worker env. Names and meaning: PRD §5, and `.dev.vars.example`.
-- Secrets (`MEDUSA_ADMIN_API_KEY`, `BC_CLIENT_SECRET`, `MIDDLEWARE_ADMIN_TOKEN`) only via
+- `MIDDLEWARE_ADMIN_TOKEN` is optional (owner's choice: the page has no token field unless it is set);
+  the page is meant to sit behind Cloudflare Access. Do not add write endpoints without one of the two.
+- Secrets (`MEDUSA_ADMIN_API_KEY`, `BC_CLIENT_SECRET`, optional `MIDDLEWARE_ADMIN_TOKEN`) only via
   `npx wrangler secret put <NAME>` or a local `.dev.vars` (git-ignored). Never in `wrangler.jsonc`,
   never echoed, logged, returned by an endpoint, or pasted into chat. Ask the owner to set them;
   do not ask for their values.

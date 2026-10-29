@@ -10,10 +10,10 @@ MEDUSA_ADMIN_API_KEY=sk_replace_me
 BC_CLIENT_SECRET=replace_me
 
 # --- Middleware ---
-# Bearer token for /api/middleware/*. Any long random string.
-MIDDLEWARE_ADMIN_TOKEN=replace_me
+# Optional extra lock for /api/middleware/*; leave out to rely on Cloudflare Access.
+# MIDDLEWARE_ADMIN_TOKEN=replace_me
 
-# Non-secret settings normally live in wrangler.jsonc "vars"; they can be overridden here:
+# Non-secret settings live in the Cloudflare dashboard in production; locally set them here:
 # BC_ENVIRONMENT_URL=https://api.businesscentral.dynamics.com/v2.0/<tenant>/Production
 # BC_TENANT_ID=
 # BC_CLIENT_ID=

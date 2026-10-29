@@ -3,6 +3,8 @@
   "name": "medusa-bc",
   "main": "src/index.js",
   "compatibility_date": "2026-10-01",
+  // Keep variables set in the dashboard across deploys.
+  "keep_vars": true,
   "assets": {
     "directory": "./public",
     // src/index.js falls back to env.ASSETS for every non-API path; without
@@ -10,20 +12,15 @@
     "binding": "ASSETS"
   },
   "vars": {
-    "MEDUSA_BACKEND_URL": "https://hoven-sa.medusajs.app",
+    "MEDUSA_BACKEND_URL": "https://hoven-sa.medusajs.app"
 
-    // Business Central connection (not secret). See docs/PRD.md §5.
-    "BC_ENVIRONMENT_URL": "",
-    "BC_TENANT_ID": "",
-    "BC_CLIENT_ID": "",
-    "BC_COMPANY_ID": "",
-    "BC_PRICE_LIST_SERVICE": "SalesPriceLists",
-    "BC_PRICE_LIST_LINE_SERVICE": "PriceListLines",
-    "BC_INVENTORY_SERVICE": "ItemLedgerEntries"
+    // Business Central settings (BC_ENVIRONMENT_URL, BC_TENANT_ID, BC_CLIENT_ID,
+    // BC_COMPANY_ID) are set in the Cloudflare dashboard, not here: a value
+    // listed here would overwrite the dashboard's on every deploy.
 
     // Secrets, set with `npx wrangler secret put <NAME>` (never here):
     //   MEDUSA_ADMIN_API_KEY  - Medusa secret API key (sk_...)
     //   BC_CLIENT_SECRET      - Entra ID app client secret
-    //   MIDDLEWARE_ADMIN_TOKEN - bearer token for /api/middleware/*
+    //   MIDDLEWARE_ADMIN_TOKEN - optional extra lock for /api/middleware/*
   }
 }

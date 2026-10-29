@@ -14,7 +14,6 @@ const SETTINGS = {
     { name: "BC_CLIENT_SECRET", secret: true },
     { name: "BC_COMPANY_ID", secret: false },
   ],
-  middleware: [{ name: "MIDDLEWARE_ADMIN_TOKEN", secret: true }],
 };
 
 const TIMEOUT_MS = 30000;
@@ -104,12 +103,17 @@ export async function checkBusinessCentral(env) {
   }
 }
 
-/** Constant-time comparison of the admin token, so it cannot be guessed byte by byte. */
+/**
+ * Optional extra lock. Without MIDDLEWARE_ADMIN_TOKEN the API is open to
+ * whoever can reach the page, so protect the page with Cloudflare Access.
+ * With it, every call needs the token (compared in constant time).
+ */
 export function isAuthorized(request, env) {
   const expected = value(env, "MIDDLEWARE_ADMIN_TOKEN");
+  if (!expected) return true;
   const header = request.headers.get("authorization") ?? "";
   const given = header.startsWith("Bearer ") ? header.slice(7) : "";
-  if (!expected || given.length !== expected.length) return false;
+  if (given.length !== expected.length) return false;
   let diff = 0;
   for (let i = 0; i < expected.length; i++) diff |= expected.charCodeAt(i) ^ given.charCodeAt(i);
   return diff === 0;
@@ -118,15 +122,12 @@ export function isAuthorized(request, env) {
 const json = (body, status = 200) => Response.json(body, { status, headers: { "cache-control": "no-store" } });
 
 /**
- * The middleware API, all behind MIDDLEWARE_ADMIN_TOKEN:
+ * The middleware API (behind MIDDLEWARE_ADMIN_TOKEN only when it is set):
  *   GET  /api/middleware/status        which settings are set or missing (never a secret's value)
  *   POST /api/middleware/check/medusa  live check of the Medusa secret key
  *   POST /api/middleware/check/bc      live check of the BC credentials and company
  */
 export async function middlewareApi(request, env, pathname) {
-  if (!value(env, "MIDDLEWARE_ADMIN_TOKEN")) {
-    return json({ error: "MIDDLEWARE_ADMIN_TOKEN is not set; the middleware API is closed." }, 503);
-  }
   if (!isAuthorized(request, env)) return json({ error: "Unauthorized" }, 401);
 
   if (pathname === "/api/middleware/status" && request.method === "GET") {

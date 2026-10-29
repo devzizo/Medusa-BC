@@ -26,7 +26,8 @@
     button { padding: 10px 18px; font: inherit; font-weight: 600; border: 1px solid var(--accent); border-radius: 2px; cursor: pointer; background: var(--accent); color: #fff; }
     button.ghost { background: #fff; color: var(--accent); }
     button:disabled { opacity: .5; cursor: default; }
-    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .lock { margin-bottom: 16px; }
     @media (max-width: 760px) { .grid { grid-template-columns: 1fr; } }
     .side-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
     .state { font-size: .8rem; font-weight: 600; padding: 2px 8px; border-radius: 2px; background: #f0eee8; color: var(--muted); }
@@ -67,23 +68,25 @@
 
   <main>
     <section data-view="connection" data-testid="view-connection">
-      <div class="panel">
+      <!-- Shown only when the Worker has MIDDLEWARE_ADMIN_TOKEN set (the API answers 401). -->
+      <div class="panel lock" id="lock" hidden data-testid="lock">
         <label for="token">توكن الوسيط (MIDDLEWARE_ADMIN_TOKEN)</label>
         <div class="row">
           <input id="token" type="password" autocomplete="off" placeholder="الصق التوكن هنا" data-testid="token">
-          <button id="load" data-testid="load">عرض الإعدادات</button>
+          <button id="load" data-testid="load">دخول</button>
         </div>
         <p class="hint">يبقى في هذا التبويب من المتصفح فقط، ويُمسح عند إغلاقه.</p>
         <p class="error" id="token-error" hidden data-testid="token-error"></p>
       </div>
 
+      <p class="error" id="load-error" hidden data-testid="load-error"></p>
       <div class="grid">
         <div class="panel" data-testid="side-bc">
           <div class="side-head">
             <h2>Business Central</h2>
             <span class="state" id="state-bc" data-testid="state-bc">لم يُفحص</span>
           </div>
-          <table><tbody id="settings-bc"><tr><td colspan="2">اعرض الإعدادات أولًا.</td></tr></tbody></table>
+          <table><tbody id="settings-bc"><tr><td colspan="2">جارٍ التحميل…</td></tr></tbody></table>
           <button id="check-bc" class="ghost" disabled data-testid="check-bc">فحص الاتصال بـ Business Central</button>
           <div class="result" id="result-bc" data-testid="result-bc"></div>
         </div>
@@ -93,13 +96,13 @@
             <h2>Medusa</h2>
             <span class="state" id="state-medusa" data-testid="state-medusa">لم يُفحص</span>
           </div>
-          <table><tbody id="settings-medusa"><tr><td colspan="2">اعرض الإعدادات أولًا.</td></tr></tbody></table>
+          <table><tbody id="settings-medusa"><tr><td colspan="2">جارٍ التحميل…</td></tr></tbody></table>
           <button id="check-medusa" class="ghost" disabled data-testid="check-medusa">فحص الاتصال بـ Medusa</button>
           <div class="result" id="result-medusa" data-testid="result-medusa"></div>
         </div>
       </div>
 
-      <footer>الأسرار تُضبط من Cloudflare (<code>npx wrangler secret put</code>) ولا تظهر هنا أبدًا.</footer>
+      <footer>الإعدادات تُضبط من Cloudflare: Workers &amp; Pages ← medusa-bc ← Settings ← Variables and Secrets. الأسرار لا تظهر هنا أبدًا.</footer>
     </section>
   </main>
 
@@ -125,12 +128,15 @@
 
     const escape = (text) => String(text).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 
+    class Locked extends Error {}
+
     const call = async (path, method = "GET") => {
       const token = $("token").value.trim();
       try { sessionStorage.setItem(KEY, token); } catch {}
-      const res = await fetch(path, { method, headers: { authorization: `Bearer ${token}` } });
+      const res = await fetch(path, { method, headers: token ? { authorization: `Bearer ${token}` } : {} });
       const body = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(res.status === 401 ? "التوكن غير صحيح." : body.error || `HTTP ${res.status}`);
+      if (res.status === 401) throw new Locked(token ? "التوكن غير صحيح." : "");
+      if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
       return body;
     };
 
@@ -143,8 +149,11 @@
         </tr>`).join("");
     };
 
-    $("load").addEventListener("click", async () => {
+    // Settings load on their own. The token panel appears only if the API
+    // asks for one, i.e. MIDDLEWARE_ADMIN_TOKEN is set in Cloudflare.
+    const load = async () => {
       $("token-error").hidden = true;
+      $("load-error").hidden = true;
       $("load").disabled = true;
       try {
         const { settings } = await call("/api/middleware/status");
@@ -152,13 +161,22 @@
         renderSettings("settings-medusa", settings.medusa);
         $("check-bc").disabled = false;
         $("check-medusa").disabled = false;
+        $("lock").hidden = true;
       } catch (error) {
-        $("token-error").textContent = error.message;
-        $("token-error").hidden = false;
+        if (error instanceof Locked) {
+          $("lock").hidden = false;
+          $("token-error").textContent = error.message;
+          $("token-error").hidden = !error.message;
+        } else {
+          $("load-error").textContent = `تعذّر قراءة الإعدادات: ${error.message}`;
+          $("load-error").hidden = false;
+        }
       } finally {
         $("load").disabled = false;
       }
-    });
+    };
+    $("load").addEventListener("click", load);
+    load();
 
     const check = (side) => async () => {
       const button = $(`check-${side}`);
@@ -177,7 +195,8 @@
         state.textContent = result.ok ? "متصل" : "غير متصل";
         state.className = `state ${result.ok ? "ok" : "err"}`;
       } catch (error) {
-        box.textContent = error.message;
+        if (error instanceof Locked) $("lock").hidden = false;
+        box.textContent = error.message || "اكتب توكن الوسيط أولًا.";
         box.className = "result err";
         state.textContent = "غير متصل";
         state.className = "state err";
