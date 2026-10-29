@@ -2,6 +2,8 @@
 
 Product landing page for the Hoven Medusa store, deployed on Cloudflare Workers.
 
+Live: https://medusa-bc.dev-zizo.workers.dev
+
 - `public/index.html` — the page (Arabic, RTL). Loads products from `/api/products`.
 - `src/index.js` — Worker that proxies `/api/products` to the Medusa Store API
   (`/store/products`) using the store's publishable key, and serves `public/` for everything else.
