@@ -59,6 +59,8 @@
     .run { padding: 12px 0; border-top: 1px solid var(--line); }
     .run:first-of-type { border-top: 0; }
     .summary td { padding: 4px 0; }
+    table.issues { font-size: .82rem; margin-top: 8px; }
+    table.issues td, table.issues th { padding: 6px 8px 6px 0; }
     .summary td:last-child { text-align: end; font-variant-numeric: tabular-nums; }
     footer { margin-top: 24px; color: var(--muted); font-size: .85rem; }
     .subtabs { display: flex; gap: 8px; margin-bottom: 16px; }
@@ -80,6 +82,7 @@
         <a href="#payments" data-tab="payments" data-testid="nav-payments">طرق الدفع</a>
         <a href="#items" data-tab="items" data-testid="nav-items">مزامنة الأصناف</a>
         <a href="#inventory" data-tab="inventory" data-testid="nav-inventory">مزامنة المخزون</a>
+        <a href="#customers" data-tab="customers" data-testid="nav-customers">نقل العملاء</a>
       </nav>
     </div>
   </header>
@@ -235,6 +238,27 @@
         <div data-runs="inventory" data-testid="runs-inventory"><p class="notice">لا يوجد تشغيل بعد.</p></div>
       </div>
     </section>
+
+    <section data-view="customers" data-testid="view-customers" hidden>
+      <div class="panel">
+        <h2>نقل العملاء</h2>
+        <p class="hint">
+          ينقل <strong>كل</strong> عملاء BC إلى Medusa (المحظورون أيضًا، وحالة الحظر في metadata): الاسم (الشخص يُقسَم إلى اسم أول وأخير،
+          والشركة تبقى اسم شركة)، الجوال، البريد، وعنوان واحد باسم «Business Central». العميل مربوط برقمه في BC
+          (<bdi class="mono">metadata.bc_customer_number</bdi>)، فالتشغيل الثاني يحدّث ولا يكرر، والعملاء الذين لم يأتوا من BC لا يُلمسون.
+          Medusa لا يقبل بريدًا واحدًا لعميلين: البريد المستعمل عند عميل آخر أو غير الصالح يُترك ويظهر في الملاحظات لتعالجه.
+        </p>
+        <div class="row" style="margin-top:12px">
+          <button data-run="customers" data-testid="run-customers">بدء نقل العملاء</button>
+          <span class="notice" data-notice="customers"></span>
+        </div>
+        <div class="result" data-result="customers" data-testid="result-customers"></div>
+      </div>
+      <div class="panel">
+        <h2>السجل</h2>
+        <div data-runs="customers" data-testid="runs-customers"><p class="notice">لا يوجد تشغيل بعد.</p></div>
+      </div>
+    </section>
   </main>
 
   <script>
@@ -279,6 +303,7 @@
     // ---- Settings tab ----
     const FIELDS = ["vat_bus_posting_group", "gen_bus_posting_group", "price_list_service", "price_list_line_service", "inventory_service"];
     let saved = {};
+    let medusaUrl = "";
     const renderEnv = (target, rows) => {
       $(target).innerHTML = rows.map((row) => `
         <tr><td class="k">${escape(row.name)}</td>
@@ -306,6 +331,7 @@
         saved = data.saved;
         renderEnv("settings-bc", data.settings.bc);
         renderEnv("settings-medusa", data.settings.medusa);
+        medusaUrl = (data.settings.medusa.find((s) => s.name === "MEDUSA_BACKEND_URL")?.value ?? "").replace(/\/+$/, "");
         for (const key of FIELDS) $(key).value = saved[key] ?? "";
         showSavedCompanyOption();
         // Unset means on; "0" is off.
@@ -432,7 +458,7 @@
     loaders.locations = loadMapping("locations");
     loaders.payments = loadMapping("payments");
 
-    // ---- Sync tabs (items, inventory): run button and history ----
+    // ---- Sync tabs (items, inventory, customers): run button and history ----
     const SYNCS = {
       items: {
         summary: [
@@ -443,7 +469,7 @@
           ["products_drafted_blocked", "تحولت إلى draft (محظورة في BC)"],
           ["products_drafted_zero_inventory", "تحولت إلى draft (مخزونها في BC صفر)"],
           ["bc_price_lists", "قوائم أسعار في BC"], ["price_lists_created", "قوائم أُنشئت"], ["price_lists_updated", "قوائم حُدّثت"],
-          ["price_lists_deactivated", "قوائم أُوقفت"], ["price_list_prices", "أسعار في القوائم"], ["issues", "ملاحظات"],
+          ["price_lists_deactivated", "قوائم أُوقفت"], ["price_list_prices", "أسعار في القوائم"], ["barcode_conflicts", "باركود مكرر (لم تُنشأ أو تُحدّث)"], ["issues", "ملاحظات"],
         ],
         stages: { read: "قراءة BC", categories: "الفئات", products: "المنتجات", toDraft: "غير الموجودة في BC", priceListsRead: "قراءة قوائم الأسعار", variantIds: "ربط المتغيرات", priceLists: "قوائم الأسعار" },
       },
@@ -460,9 +486,34 @@
         ],
         stages: { read: "قراءة BC", variants: "مطابقة المتغيرات", track: "عناصر المخزون", levels: "الأرصدة" },
       },
+      customers: {
+        summary: [
+          ["bc_customers", "عملاء في BC"], ["created", "عملاء أُنشئوا"], ["updated", "عملاء حُدّثوا"], ["unchanged", "بلا تغيير"],
+          ["email_left_out", "بريد تُرك (مستعمل عند عميل آخر)"], ["failed", "فشل نقلهم"], ["issues", "ملاحظات"],
+        ],
+        stages: { read: "قراءة BC", index: "قراءة عملاء Medusa", match: "المطابقة", write: "الكتابة" },
+      },
     };
     const STATUS = { running: ["جارٍ", "warn"], succeeded: ["نجحت", "ok"], failed: ["فشلت", "err"] };
     const polling = {};
+    const lastIssues = {};
+    // Every note of the latest run as CSV (UTF-8 with BOM so Excel reads Arabic).
+    const downloadCsv = (kind) => {
+      const cell = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+      const rows = [["kind", "ref", "item_title", "barcode", "existing_product", "existing_sku", "message"]].concat(
+        (lastIssues[kind] ?? []).map((i) => [i.kind, i.ref, i.item_title, i.barcode, i.existing?.title, i.existing?.sku, i.message]),
+      );
+      const blob = new Blob(["\ufeff" + rows.map((r) => r.map(cell).join(",")).join("\r\n")], { type: "text/csv;charset=utf-8" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = `medusa-bc-${kind}-notes.csv`;
+      link.click();
+      URL.revokeObjectURL(link.href);
+    };
+    document.addEventListener("click", (event) => {
+      const kind = event.target.closest?.("[data-csv]")?.dataset.csv;
+      if (kind) downloadCsv(kind);
+    });
     const renderRuns = (kind, runs) => {
       const box = document.querySelector(`[data-runs="${kind}"]`);
       if (!runs.length) { box.innerHTML = `<p class="notice">لا يوجد تشغيل بعد.</p>`; return; }
@@ -471,14 +522,25 @@
         const [text, cls] = STATUS[run.status] ?? [run.status, ""];
         const summary = index === 0 ? labels.filter(([k]) => run.summary[k] !== undefined)
           .map(([k, l]) => `<tr><td>${l}</td><td>${escape(run.summary[k])}</td></tr>`).join("") : "";
-        const issues = index === 0 && run.issues.length ? `<details><summary>الملاحظات (${run.issues.length})</summary><ul>${run.issues
+        const barcodes = index === 0 ? run.issues.filter((i) => i.kind === "barcode") : [];
+        const others = index === 0 ? run.issues.filter((i) => i.kind !== "barcode") : [];
+        // Duplicate barcodes are fixed by hand, so they get their own list with what that needs.
+        const barcodeList = barcodes.length ? `<details open data-testid="barcode-list"><summary>باركود مكرر — يحتاج معالجة يدوية (${barcodes.length})</summary>
+          <table class="issues"><thead><tr><th>الصنف في BC</th><th>الاسم</th><th>الباركود</th><th>موجود على منتج في Medusa</th></tr></thead><tbody>${barcodes.map((i) => `
+            <tr><td class="mono">${escape(i.ref)}</td><td>${escape(i.item_title ?? "")}</td><td class="mono">${escape(i.barcode ?? "")}</td>
+            <td>${i.existing ? `${medusaUrl && i.existing.id ? `<a href="${escape(medusaUrl)}/app/products/${escape(i.existing.id)}" target="_blank" rel="noopener">${escape(i.existing.title)}</a>` : escape(i.existing.title)} <span class="mono notice">${escape(i.existing.sku ?? "")}</span>` : "غير معروف"}</td></tr>`).join("")}
+          </tbody></table></details>` : "";
+        const issues = others.length ? `<details><summary>الملاحظات (${others.length})</summary><ul>${others
           .map((i) => `<li><span class="mono">${escape(i.ref)}</span>: <bdi>${escape(i.message)}</bdi></li>`).join("")}</ul></details>` : "";
+        const download = index === 0 && run.issues.length ? `<button class="ghost" data-csv="${kind}" data-testid="csv-${kind}">تنزيل الملاحظات (CSV)</button>` : "";
         return `<div class="run" ${index === 0 ? `data-testid="last-run-${kind}"` : ""}>
           <div class="row"><span class="state ${cls}">${text}${run.status === "running" ? ` — ${stages[run.stage] ?? run.stage}` : ""}</span>
           <span class="notice">${new Date(run.started_at).toLocaleString("ar-SA-u-nu-latn")}</span></div>
           ${run.error ? `<p class="error"><bdi>${escape(run.error)}</bdi></p>` : ""}
-          ${summary ? `<table class="summary">${summary}</table>` : ""}${issues}</div>`;
+          ${summary ? `<table class="summary">${summary}</table>` : ""}${barcodeList}${issues}
+          ${download ? `<div class="row" style="margin-top:8px">${download}</div>` : ""}</div>`;
       }).join("");
+      lastIssues[kind] = runs[0].issues;
     };
     const loadRuns = (kind) => async () => {
       const button = document.querySelector(`[data-run="${kind}"]`);
@@ -505,7 +567,7 @@
     for (const kind of Object.keys(SYNCS)) {
       const button = document.querySelector(`[data-run="${kind}"]`);
       const result = document.querySelector(`[data-result="${kind}"]`);
-      loaders[kind === "inventory" ? kind : `sub-${kind}`] = () => {
+      loaders[kind === "inventory" || kind === "customers" ? kind : `sub-${kind}`] = () => {
         document.querySelector(`[data-notice="${kind}"]`).textContent = saved.company_id
           ? `الشركة: ${saved.company_display_name || saved.company_name}`
           : "اختر الشركة في الإعدادات أولًا.";

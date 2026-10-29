@@ -20,16 +20,23 @@ The admin page (`public/index.html`, Arabic, RTL) has five tabs, the same tools 
 5. **مزامنة المخزون (Inventory sync)** — for every Medusa variant whose SKU BC has, and every
    **mapped** stock location, the stocked quantity becomes the BC location's stock (Item Ledger
    Entries, page 38). None in BC → 0. Unmapped locations and products not in BC are not touched.
+6. **نقل العملاء (Customers)** — every BC customer (blocked ones too) → a Medusa customer with one
+   address named "Business Central", owned by `metadata.bc_customer_number` (a second run updates,
+   never duplicates; customers not from BC are never touched). An email another customer already
+   holds, or an invalid one, is left out and listed in the notes.
+
+Duplicate barcodes found by the item sync are listed apart ("باركود مكرر") with the Medusa product
+that holds the barcode, and every note downloads as CSV, for fixing by hand.
 
 Code:
 
 - `src/index.js` — serves the page, routes `/api/middleware/*`, exports the Durable Object.
 - `src/api.js` — the API behind the page.
 - `src/store.js` — Durable Object `MiddlewareStore` (SQLite): settings, mappings, sync runs.
-- `src/sync/items.js`, `src/sync/inventory.js` — the two syncs, as steps under a subrequest budget
+- `src/sync/items.js`, `src/sync/inventory.js`, `src/sync/customers.js` — the syncs, as steps under a subrequest budget
   driven by alarms.
 - `src/lib/bc.js`, `src/lib/medusa.js`, `src/lib/map.js` — BC client, Medusa Admin client, the pure
-  mapping rules; `src/lib/inventory.js` the stock arithmetic (both ported from the plugin, tested
+  mapping rules; `src/lib/inventory.js` the stock arithmetic, `src/lib/customers.js` the customer mapping (both ported from the plugin, tested
   in `test/`: `npm test`).
 - `docs/PRD.md` — the full spec. `.claude/skills/medusa-bc-middleware/SKILL.md` — how to work on it.
 
@@ -80,7 +87,7 @@ secret is set, in which case every call needs `Authorization: Bearer <token>` an
 | `POST /api/middleware/company` | `{ company_id }` from BC's list; clears both mappings when it changes. |
 | `POST /api/middleware/settings` | Posting groups and price list service names. |
 | `GET/POST /api/middleware/mappings/{locations,payments}` | Both lists live, and the saved mapping; POST `{ mappings: [{ id, code }] }`. |
-| `GET /api/middleware/{items,categories,inventory}/runs`, `POST …/run` | Sync history; start a run (one at a time). |
+| `GET /api/middleware/{items,categories,inventory,customers}/runs`, `POST …/run` | Sync history; start a run (one at a time). |
 
 ## Deploy
 

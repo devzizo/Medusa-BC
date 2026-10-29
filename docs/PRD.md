@@ -166,6 +166,22 @@ BC's item categories upserted by handle, nothing else touched.
   sales channel is reported.
 - **Complete or fail:** every BC list is read to the end of `@odata.nextLink`.
 
+### 6.2a Customer sync (BC → Medusa) — `src/sync/customers.js`
+
+- Source: API v2.0 `/customers`, **all** of them (blocked included; `blocked` goes to metadata).
+- Person → `first_name` (first word) + `last_name` (the rest); Company → `company_name`. Phone, email
+  (lower-cased; one Medusa rejects is left out and reported). One address named **"Business Central"**
+  (address lines, city, state → province, postal code, country → lower-case code), default for
+  shipping and billing; none when BC has neither address line nor city.
+- **Ownership:** `metadata.bc_customer_number`. Medusa's customers are read page by page (by `id`);
+  a second run updates only what changed and creates nothing. A customer not from BC is never touched.
+- **Emails:** Medusa keeps guest emails unique (index on `email, has_account`). An email held by a
+  customer the sync does not own, or by an earlier BC customer in the same list, is left out of that
+  customer and reported; the customer is still imported.
+- Metadata: `bc_customer_id`, `bc_customer_number`, `bc_type`, `bc_blocked`, `bc_last_modified`; keys
+  BC no longer gives are written as `""` so a rerun changes nothing.
+- Stages: read → index (Medusa customers) → match (no calls) → write (≤ 2 calls per customer).
+
 ### 6.3 Mappings
 
 | Mapping | Medusa side | BC side | Stored |
@@ -187,9 +203,11 @@ clears both mappings (they name another company's codes).
 ### 6.5 Runs and the admin page
 
 - Tabs: **Settings** (status of §5, "Check connection", company, posting groups, page names),
-  **Locations**, **Payment methods**, **Item sync**, **Inventory sync**.
+  **Locations**, **Payment methods**, **Item sync**, **Inventory sync**, **Customers**.
 - Each sync: "Preview" (counts + 2 raw rows per source, nothing written), "Run", and the last 10 runs
-  with summary counts and issues (capped at 500 per run).
+  with summary counts and issues (capped at 2000 per run). Duplicate barcodes get their own list
+  (BC item, barcode, the Medusa product holding it, linked to the admin), and every note downloads
+  as CSV (UTF-8 with BOM, for Excel).
 - One run at a time across both kinds. A run older than 2 h is treated as dead.
 
 ## 7. Integration details
@@ -220,7 +238,7 @@ Medusa 2.19 facts that cost time:
   `https://api.businesscentral.dynamics.com/.default`. Cache per (tenant, client, hash(secret)) until
   60 s before expiry; the "check connection" always asks for a fresh one.
 - `GET {env}/api/v2.0/companies`, `/companies({id})/locations | itemCategories | items | itemVariants |
-  paymentMethods`. Paging via `@odata.nextLink` (absolute URL).
+  paymentMethods | customers`. Paging via `@odata.nextLink` (absolute URL).
 - 30 s timeout per call; errors classified: `auth_failed`, `timeout`, `network`, `http_error` with BC's
   own message.
 
@@ -268,7 +286,9 @@ No id map table is needed in phase 1: BC identity is carried in Medusa handles, 
    quantities in every mapped location; a third run changes nothing.
 4. A product with a clashing SKU is never modified.
 5. Mappings survive a reload and are cleared by a company change.
-6. Killing the Worker mid-run leaves a run that the next start marks failed, not a stuck lock.
+6. Customer sync over a two-page BC list creates each customer once, leaves out a shared email
+   with a note, and a second run changes nothing.
+7. Killing the Worker mid-run leaves a run that the next start marks failed, not a stuck lock.
 
 ## 11. Test plan
 

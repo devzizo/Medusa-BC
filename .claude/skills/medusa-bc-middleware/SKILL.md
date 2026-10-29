@@ -1,6 +1,6 @@
 ---
 name: medusa-bc-middleware
-description: Build, extend or debug the Medusa ↔ Business Central middleware in this repo (a Cloudflare Worker that syncs BC items, prices, stock, locations and payment methods into Medusa over its Admin API). Use for any work on item sync, inventory sync, mappings, the token settings, or the BC/Medusa clients.
+description: Build, extend or debug the Medusa ↔ Business Central middleware in this repo (a Cloudflare Worker that syncs BC items, prices, stock, customers, locations and payment methods into Medusa over its Admin API). Use for any work on item sync, inventory sync, customer sync, mappings, the token settings, or the BC/Medusa clients.
 ---
 
 # Medusa ↔ Business Central middleware
@@ -53,13 +53,15 @@ It replaces the in-Medusa plugin `@hoven/medusa-bc` (repo `devzizo/essentials-st
    Options: blocked items not imported (or imported as drafts), zero stock in BC (`item.inventory`) →
    draft. An empty BC item list changes nothing. Page Medusa lists by `id`, never `created_at` (ties
    reorder between pages and products get skipped).
-8. **One run at a time** across item and inventory syncs; a run older than 2 h is dead, mark it failed.
+8. **One run at a time** across all syncs (items, categories, inventory, customers); a run older than 2 h is dead, mark it failed.
 9. Mappings name one BC company's codes: a company change clears them.
 10. **Every step stays under the subrequest budget** (`SYNC_STEP_BUDGET`, default 40; the free plan
     allows 50 per invocation). A stage must save its cursor before it returns, and never start a
     product it cannot finish within what is left.
 11. **LS Central may own prices.** If Medusa answers "Prices are managed in LS Central", write the rest
     without prices and skip price lists; do not treat it as a failure.
+12. **Customers are owned by `metadata.bc_customer_number`.** Medusa allows one guest per email:
+    never take over or merge into a customer the sync did not create; leave the email out and report.
 
 ## How to verify (before any deploy)
 

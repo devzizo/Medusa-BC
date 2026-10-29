@@ -198,11 +198,41 @@ async function products({ ctx, medusa, budget }) {
         summary.products_updated++;
       }
     } catch (error) {
-      ctx.note({ kind: "product", ref: product.handle, message: `${current ? "Update" : "Create"} failed: ${error.message}` });
+      const barcode = error.message.match(DUPLICATE_BARCODE)?.[1];
+      if (barcode) {
+        await noteDuplicateBarcode(ctx, medusa, budget, product, barcode, Boolean(current));
+      } else {
+        ctx.note({ kind: "product", ref: product.handle, message: `${current ? "Update" : "Create"} failed: ${error.message}` });
+      }
       // A failed update is still our product: its prices stay in the price lists.
       ctx.setResult("product", row.seq, { status: current ? "update_failed" : "create_failed" });
     }
   }
+}
+
+// Medusa refuses a barcode another variant already has, and with it the
+// whole product. The owner fixes those by hand, so each one is logged on its
+// own with what it needs: the BC item, the barcode, and the Medusa product
+// that already carries it.
+const DUPLICATE_BARCODE = /barcode:\s*(.+?), already exists?/i;
+
+async function noteDuplicateBarcode(ctx, medusa, budget, product, barcode, updating) {
+  let holder = null;
+  if (budget.left() > 1) {
+    const { variants } = await medusa
+      .get("/admin/product-variants", { barcode, fields: "sku,product.id,product.handle,product.title", limit: 1 })
+      .catch(() => ({ variants: [] }));
+    holder = variants[0] ?? null;
+  }
+  ctx.summary.barcode_conflicts = (ctx.summary.barcode_conflicts ?? 0) + 1;
+  ctx.note({
+    kind: "barcode",
+    ref: product.metadata.bc_item_number,
+    message: `Barcode ${barcode} is already on ${holder ? `"${holder.product?.title}" (SKU ${holder.sku})` : "another product"}; item ${updating ? "not updated" : "not created"}.`,
+    item_title: product.title,
+    barcode,
+    existing: holder ? { id: holder.product?.id, handle: holder.product?.handle, title: holder.product?.title, sku: holder.sku } : null,
+  });
 }
 
 // When LS Central is switched on in Medusa, it owns prices and Medusa's

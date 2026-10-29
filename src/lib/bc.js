@@ -141,6 +141,10 @@ export const listBcItems = async (credentials, companyId, options, { includeBloc
         (item) => item.blocked !== true,
       );
 
+/** Every customer, blocked ones included (their state goes into metadata). */
+export const listBcCustomers = (credentials, companyId, options) =>
+  bcGetAll(credentials, `${companyPath(companyId)}/customers`, options);
+
 export const listBcItemVariants = (credentials, companyId, options) =>
   bcGetAll(credentials, `${companyPath(companyId)}/itemVariants`, options);
 

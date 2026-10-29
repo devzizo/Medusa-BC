@@ -1,8 +1,9 @@
 import { DurableObject } from "cloudflare:workers";
+import { runCustomerSyncStep } from "./sync/customers.js";
 import { runInventorySyncStep } from "./sync/inventory.js";
 import { runCategorySyncStep, runItemSyncStep } from "./sync/items.js";
 
-const STEPS = { items: runItemSyncStep, categories: runCategorySyncStep, inventory: runInventorySyncStep };
+const STEPS = { items: runItemSyncStep, categories: runCategorySyncStep, inventory: runInventorySyncStep, customers: runCustomerSyncStep };
 
 // All of the middleware's own state, in one Durable Object with SQLite:
 // settings chosen in the page (company, posting groups), the location and
@@ -10,7 +11,8 @@ const STEPS = { items: runItemSyncStep, categories: runCategorySyncStep, invento
 // work queue. Only one run of either kind goes at a time.
 // One instance (named "main") serves everything, so reads are consistent.
 
-const MAX_ISSUES = 500;
+// Enough for every duplicate barcode and drafted product of a real catalog.
+const MAX_ISSUES = 2000;
 // A run older than this is taken as dead rather than left blocking the next.
 const STALE_AFTER_MS = 2 * 60 * 60 * 1000;
 // Pause between sync steps; each step stays inside one invocation's budget.
@@ -181,9 +183,10 @@ export class MiddlewareStore extends DurableObject {
       save,
       settings: this.getSettings(),
       mappings: (kind) => this.getMappings(kind, this.getSettings().company_id),
-      putWork: (kind, items) => {
-        items.forEach((item, seq) =>
-          this.sql.exec("INSERT INTO work (run_id, kind, seq, key, payload) VALUES (?, ?, ?, ?, ?)", id, kind, seq, item.key, JSON.stringify(item.payload)),
+      // `from` lets a stage append page after page to the same list.
+      putWork: (kind, items, from = 0) => {
+        items.forEach((item, i) =>
+          this.sql.exec("INSERT INTO work (run_id, kind, seq, key, payload) VALUES (?, ?, ?, ?, ?)", id, kind, from + i, item.key, JSON.stringify(item.payload)),
         );
       },
       work: (kind, from = 0, limit = 1000000) =>
