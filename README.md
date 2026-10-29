@@ -16,7 +16,11 @@ The admin page (`public/index.html`, Arabic, RTL) has five tabs, the same tools 
    into Medusa alone (create, rename, never duplicate). **المنتجات (Products)** is the full sync: categories, non-blocked items with variants and unit price, and
    active sales price lists, BC → Medusa. New products are drafts; a clashing SKU is skipped. **Every
    Medusa product whose handle matches no BC item becomes a draft**, whoever created it (BC is the
-   origin). Options in Settings: blocked items not imported; zero stock in BC → draft.
+   origin). Options in Settings: blocked items not imported; zero stock in BC → draft. A third
+   sub-tab, **الصور (Images)**, moves each BC item's picture to the product the sync created, through
+   Medusa's file storage (S3/R2 on Medusa Cloud): first image, and thumbnail unless the admin chose
+   another; images added in Medusa stay; an unchanged picture is not uploaded again; one removed in
+   BC is removed from the product.
 5. **مزامنة المخزون (Inventory sync)** — for every Medusa variant whose SKU BC has, and every
    **mapped** stock location, the stocked quantity becomes the BC location's stock (Item Ledger
    Entries, page 38). None in BC → 0. Unmapped locations and products not in BC are not touched.
@@ -33,7 +37,7 @@ Code:
 - `src/index.js` — serves the page, routes `/api/middleware/*`, exports the Durable Object.
 - `src/api.js` — the API behind the page.
 - `src/store.js` — Durable Object `MiddlewareStore` (SQLite): settings, mappings, sync runs.
-- `src/sync/items.js`, `src/sync/inventory.js`, `src/sync/customers.js` — the syncs, as steps under a subrequest budget
+- `src/sync/items.js`, `src/sync/inventory.js`, `src/sync/customers.js`, `src/sync/images.js` — the syncs, as steps under a subrequest budget
   driven by alarms.
 - `src/lib/bc.js`, `src/lib/medusa.js`, `src/lib/map.js` — BC client, Medusa Admin client, the pure
   mapping rules; `src/lib/inventory.js` the stock arithmetic, `src/lib/customers.js` the customer mapping (both ported from the plugin, tested
@@ -87,7 +91,7 @@ secret is set, in which case every call needs `Authorization: Bearer <token>` an
 | `POST /api/middleware/company` | `{ company_id }` from BC's list; clears both mappings when it changes. |
 | `POST /api/middleware/settings` | Posting groups and price list service names. |
 | `GET/POST /api/middleware/mappings/{locations,payments}` | Both lists live, and the saved mapping; POST `{ mappings: [{ id, code }] }`. |
-| `GET /api/middleware/{items,categories,inventory,customers}/runs`, `POST …/run` | Sync history; start a run (one at a time). |
+| `GET /api/middleware/{items,categories,images,inventory,customers}/runs`, `POST …/run` | Sync history; start a run (one at a time). |
 
 ## Deploy
 

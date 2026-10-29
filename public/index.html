@@ -174,6 +174,7 @@
       <div class="subtabs" role="tablist">
         <button class="subtab" role="tab" data-sub="items" aria-selected="true" data-testid="sub-items">المنتجات</button>
         <button class="subtab" role="tab" data-sub="categories" aria-selected="false" data-testid="sub-categories">الفئات</button>
+        <button class="subtab" role="tab" data-sub="images" aria-selected="false" data-testid="sub-images">الصور</button>
       </div>
 
       <div data-subview="items">
@@ -214,6 +215,26 @@
         <div class="panel">
           <h2>السجل</h2>
           <div data-runs="categories" data-testid="runs-categories"><p class="notice">لا يوجد تشغيل بعد.</p></div>
+        </div>
+      </div>
+
+      <div data-subview="images" hidden>
+        <div class="panel">
+          <h2>نقل الصور</h2>
+          <p class="hint">
+            تنقل صورة كل صنف من BC (Item Picture) إلى منتجه في Medusa، للمنتجات التي أنشأتها مزامنة المنتجات فقط.
+            الصورة تُرفع إلى مخزن ملفات Medusa وتصير الصورة الأولى، والصورة المصغّرة إن لم يُختر غيرها. الصور المضافة في Medusa تبقى.
+            الصورة التي لم تتغير في BC لا تُرفع مرة ثانية، والصورة المحذوفة من BC تُحذف من المنتج. شغّلها بعد مزامنة المنتجات.
+          </p>
+          <div class="row" style="margin-top:12px">
+            <button data-run="images" data-testid="run-images">بدء نقل الصور</button>
+            <span class="notice" data-notice="images"></span>
+          </div>
+          <div class="result" data-result="images" data-testid="result-images"></div>
+        </div>
+        <div class="panel">
+          <h2>السجل</h2>
+          <div data-runs="images" data-testid="runs-images"><p class="notice">لا يوجد تشغيل بعد.</p></div>
         </div>
       </div>
     </section>
@@ -476,6 +497,13 @@
       categories: {
         summary: [["bc_categories", "فئات في BC"], ["categories_created", "فئات أُنشئت"], ["categories_updated", "فئات تغيّر اسمها"], ["issues", "ملاحظات"]],
         stages: { read: "قراءة BC", categories: "الفئات" },
+      },
+      images: {
+        summary: [
+          ["products", "منتجات من BC"], ["uploaded", "صور نُقلت"], ["unchanged", "بلا تغيير"], ["no_picture", "بلا صورة في BC"],
+          ["removed", "صور حُذفت (حُذفت من BC)"], ["failed", "فشل نقلها"], ["issues", "ملاحظات"],
+        ],
+        stages: { read: "قراءة المنتجات", pictures: "الصور" },
       },
       inventory: {
         summary: [

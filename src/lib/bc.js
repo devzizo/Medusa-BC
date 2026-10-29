@@ -99,6 +99,23 @@ export async function bcGet(credentials, pathOrUrl, options = {}) {
   return body;
 }
 
+/**
+ * An item's picture record (API v2.0 `items({id})/picture`). An item without
+ * a picture still has one, with width 0 and no content type.
+ */
+export const getBcItemPicture = (credentials, companyId, itemId, options) =>
+  bcGet(credentials, `${companyPath(companyId)}/items(${encodeURIComponent(itemId)})/picture`, options);
+
+/** The bytes behind a media link (a picture's content). */
+export async function bcGetBinary(credentials, pathOrUrl, options = {}) {
+  const token = await bcToken(credentials, options);
+  options.budget?.use();
+  const url = /^https?:/i.test(pathOrUrl) ? pathOrUrl : `${bcApiRoot(credentials.url)}${pathOrUrl}`;
+  const res = await timed(url, { headers: { authorization: `Bearer ${token}` } });
+  if (!res.ok) throw new BcError("http_error", `Business Central refused the picture (HTTP ${res.status})`, res.status);
+  return { bytes: await res.arrayBuffer(), contentType: res.headers.get("content-type") || "" };
+}
+
 /** Every row of a BC collection, following @odata.nextLink to the end. */
 export async function bcGetAll(credentials, path, options = {}) {
   const rows = [];

@@ -64,7 +64,25 @@ export function medusaClient(env, budget) {
     }
   };
 
+  /** Uploads one file through Medusa's file provider; returns { id, url }. */
+  const upload = async (name, bytes, type) => {
+    if (!base || !key) throw new MedusaApiError("MEDUSA_BACKEND_URL and MEDUSA_ADMIN_API_KEY are required.");
+    budget?.use();
+    const form = new FormData();
+    form.append("files", new Blob([bytes], { type }), name);
+    let res;
+    try {
+      res = await fetch(new URL("/admin/uploads", base), { method: "POST", headers: { authorization: `Basic ${key}` }, body: form, signal: AbortSignal.timeout(TIMEOUT_MS) });
+    } catch (error) {
+      throw new MedusaApiError(`Could not upload to Medusa: ${error?.message || error}`);
+    }
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.files?.[0]?.url) throw new MedusaApiError(`Medusa upload: ${data.message || `HTTP ${res.status}`}`, res.status);
+    return data.files[0];
+  };
+
   return {
+    upload,
     get: (path, query) => call("GET", path, { query }),
     post: (path, body, query) => call("POST", path, { body: body ?? {}, query }),
     del: (path) => call("DELETE", path),

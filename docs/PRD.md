@@ -150,6 +150,22 @@ list pages over OData.
 The item sync's first stage on its own (sub-tab "الفئات" under Item sync, run kind `categories`):
 BC's item categories upserted by handle, nothing else touched.
 
+### 6.1b Image sync — `src/sync/images.js`
+
+Sub-tab "الصور" under Item sync, run kind `images`.
+
+- Products: only those the item sync owns (handle `productHandle(metadata.bc_item_number)` and a
+  `bc_item_id`), read page by page by `id`.
+- Source: API v2.0 `items({id})/picture`. Width 0 / no content type = no picture. Content from
+  `pictureContent@odata.mediaReadLink` (fallback `…/picture/pictureContent`).
+- Upload: `POST /admin/uploads` (multipart `files`) through Medusa's file provider, so the image
+  lands in the store's own storage (S3/R2 on Medusa Cloud), never a BC link.
+- The BC picture is the product's first image; other images stay. Thumbnail set only when empty or
+  still the previous BC picture. `metadata.bc_picture_url` and `bc_picture_etag` (`@odata.etag`):
+  an unchanged picture costs one call and no upload. Removed in BC → removed from the product.
+- A replaced picture's old file stays in storage (no delete endpoint used).
+- ≤ 4 calls per product (picture, content, upload, update).
+
 ### 6.2 Inventory sync (BC → Medusa) — `src/sync/inventory.js`
 
 - Source: published **Item Ledger Entries** (page 38). Stock per location = sum of `Remaining_Quantity`
@@ -238,7 +254,7 @@ Medusa 2.19 facts that cost time:
   `https://api.businesscentral.dynamics.com/.default`. Cache per (tenant, client, hash(secret)) until
   60 s before expiry; the "check connection" always asks for a fresh one.
 - `GET {env}/api/v2.0/companies`, `/companies({id})/locations | itemCategories | items | itemVariants |
-  paymentMethods | customers`. Paging via `@odata.nextLink` (absolute URL).
+  paymentMethods | customers`, `items({id})/picture`. Paging via `@odata.nextLink` (absolute URL).
 - 30 s timeout per call; errors classified: `auth_failed`, `timeout`, `network`, `http_error` with BC's
   own message.
 

@@ -13,8 +13,8 @@ import { DEFAULT_PRICE_LIST_LINE_SERVICE, DEFAULT_PRICE_LIST_SERVICE } from "./s
 //   POST /api/middleware/settings               posting groups and price list service names
 //   GET  /api/middleware/mappings/{locations,payments}
 //   POST /api/middleware/mappings/{locations,payments}   { mappings: [{ id, code|null }] }
-//   GET  /api/middleware/{items,categories,inventory,customers}/runs
-//   POST /api/middleware/{items,categories,inventory,customers}/run
+//   GET  /api/middleware/{items,categories,images,inventory,customers}/runs
+//   POST /api/middleware/{items,categories,images,inventory,customers}/run
 
 const json = (body, status = 200) => Response.json(body, { status, headers: { "cache-control": "no-store" } });
 const fail = (message, status = 400) => json({ error: message }, status);
@@ -122,7 +122,7 @@ export async function middlewareApi(request, env, pathname) {
     }
   }
 
-  const sync = pathname.match(/^\/api\/middleware\/(items|categories|inventory|customers)\/(runs|run)$/);
+  const sync = pathname.match(/^\/api\/middleware\/(items|categories|images|inventory|customers)\/(runs|run)$/);
   if (sync) {
     const [, kind, action] = sync;
     if (action === "runs" && method === "GET") return json({ runs: await db.listRuns(kind) });
