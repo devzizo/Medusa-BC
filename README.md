@@ -1,6 +1,13 @@
 # Medusa BC
 
-A static "Hello World" landing page, deployed on Cloudflare Workers (static assets).
+Product landing page for the Hoven Medusa store, deployed on Cloudflare Workers.
+
+- `public/index.html` — the page (Arabic, RTL). Loads products from `/api/products`.
+- `src/index.js` — Worker that proxies `/api/products` to the Medusa Store API
+  (`/store/products`) using the store's publishable key, and serves `public/` for everything else.
+- `wrangler.jsonc` — backend URL, publishable key and region (SAR) live in `vars`.
+
+The Worker only uses the publishable key (Store API). Never put the secret `sk_` admin key in this repo.
 
 ## Deploy
 

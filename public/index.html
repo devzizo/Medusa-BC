@@ -1,30 +1,111 @@
 <!doctype html>
-<html lang="en">
+<html lang="ar" dir="rtl">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Hello World — Medusa BC</title>
+  <title>هوفن — المنتجات</title>
   <style>
-    :root { color-scheme: light dark; }
-    * { box-sizing: border-box; margin: 0; }
-    body {
-      min-height: 100vh;
-      display: grid;
-      place-items: center;
-      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-      background: linear-gradient(135deg, #0f172a, #1e3a8a);
-      color: #f8fafc;
-      text-align: center;
-      padding: 16px;
+    :root {
+      --bg: #f7f5f2; --card: #ffffff; --text: #1c1917; --muted: #78716c;
+      --border: #e7e5e4; --accent: #1e3a8a;
     }
-    h1 { font-size: clamp(2.5rem, 10vw, 6rem); letter-spacing: -0.03em; }
-    p { margin-top: 1rem; font-size: 1.125rem; opacity: 0.8; }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: #0c0a09; --card: #1c1917; --text: #f5f5f4; --muted: #a8a29e; --border: #292524; --accent: #93c5fd; }
+    }
+    * { box-sizing: border-box; margin: 0; }
+    body { background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, "Segoe UI", Tahoma, sans-serif; }
+    header { padding: 48px 16px 24px; text-align: center; }
+    h1 { font-size: clamp(2rem, 6vw, 3rem); letter-spacing: -0.02em; }
+    header p { color: var(--muted); margin-top: 8px; }
+    .search { display: flex; justify-content: center; padding: 0 16px 24px; }
+    .search input {
+      width: 100%; max-width: 420px; padding: 12px 16px; font: inherit; color: var(--text);
+      background: var(--card); border: 1px solid var(--border); border-radius: 999px;
+    }
+    main { max-width: 1200px; margin: 0 auto; padding: 0 16px 48px; }
+    .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; }
+    .card img { width: 100%; aspect-ratio: 1; object-fit: cover; background: var(--border); display: block; }
+    .card .body { padding: 12px; display: flex; flex-direction: column; gap: 6px; flex: 1; }
+    .card h2 { font-size: 0.95rem; font-weight: 600; line-height: 1.4; }
+    .price { color: var(--accent); font-weight: 700; margin-top: auto; }
+    .status { text-align: center; color: var(--muted); padding: 24px 0; }
+    .more { display: block; margin: 24px auto 0; padding: 12px 28px; font: inherit; font-weight: 600; color: #fff; background: #1e3a8a; border: 0; border-radius: 999px; cursor: pointer; }
+    .more[hidden] { display: none; }
   </style>
 </head>
 <body>
+  <header>
+    <h1>هوفن</h1>
+    <p id="count">جاري تحميل المنتجات…</p>
+  </header>
+  <form class="search" id="search">
+    <input type="search" name="q" placeholder="ابحث عن منتج…" aria-label="بحث">
+  </form>
   <main>
-    <h1>Hello World</h1>
-    <p>Medusa BC — running on Cloudflare</p>
+    <div class="grid" id="grid"></div>
+    <p class="status" id="status" hidden></p>
+    <button class="more" id="more" hidden>عرض المزيد</button>
   </main>
+  <script>
+    const grid = document.getElementById("grid");
+    const more = document.getElementById("more");
+    const status = document.getElementById("status");
+    const countEl = document.getElementById("count");
+    const fmt = (amount, currency) =>
+      new Intl.NumberFormat("ar-SA", { style: "currency", currency: (currency || "sar").toUpperCase() }).format(amount);
+
+    let offset = 0, query = "";
+
+    async function load(reset) {
+      if (reset) { offset = 0; grid.replaceChildren(); }
+      more.hidden = true;
+      status.hidden = false;
+      status.textContent = "جاري التحميل…";
+      try {
+        const res = await fetch(`/api/products?offset=${offset}&q=${encodeURIComponent(query)}`);
+        if (!res.ok) throw new Error(res.status);
+        const data = await res.json();
+        for (const p of data.products) grid.append(card(p));
+        offset += data.products.length;
+        countEl.textContent = `${data.count.toLocaleString("ar-SA")} منتج`;
+        status.hidden = data.count > 0;
+        status.textContent = "لا توجد منتجات";
+        more.hidden = offset >= data.count;
+      } catch {
+        status.textContent = "تعذر تحميل المنتجات، حاول مرة ثانية.";
+      }
+    }
+
+    function card(p) {
+      const el = document.createElement("article");
+      el.className = "card";
+      const img = document.createElement("img");
+      img.loading = "lazy";
+      img.alt = p.title;
+      if (p.thumbnail) img.src = p.thumbnail;
+      const body = document.createElement("div");
+      body.className = "body";
+      const h = document.createElement("h2");
+      h.textContent = p.title;
+      body.append(h);
+      if (p.price != null) {
+        const price = document.createElement("span");
+        price.className = "price";
+        price.textContent = fmt(p.price, p.currency);
+        body.append(price);
+      }
+      el.append(img, body);
+      return el;
+    }
+
+    more.addEventListener("click", () => load(false));
+    document.getElementById("search").addEventListener("submit", (e) => {
+      e.preventDefault();
+      query = e.target.q.value.trim();
+      load(true);
+    });
+    load(true);
+  </script>
 </body>
 </html>
