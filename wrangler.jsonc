@@ -11,6 +11,20 @@
     // Publishable keys are public by design (Store API only), so it's fine in config.
     "MEDUSA_PUBLISHABLE_KEY": "pk_726da061a4cbfd88624254a6501963b30cd627eb91e4e2fce875d5469ab259c4",
     // "saudi arabia" region (SAR)
-    "MEDUSA_REGION_ID": "reg_01M1CRW6JX81RRA0H2SA2XE43Z"
+    "MEDUSA_REGION_ID": "reg_01M1CRW6JX81RRA0H2SA2XE43Z",
+
+    // Business Central connection (not secret). See docs/PRD.md §5.
+    "BC_ENVIRONMENT_URL": "",
+    "BC_TENANT_ID": "",
+    "BC_CLIENT_ID": "",
+    "BC_COMPANY_ID": "",
+    "BC_PRICE_LIST_SERVICE": "SalesPriceLists",
+    "BC_PRICE_LIST_LINE_SERVICE": "PriceListLines",
+    "BC_INVENTORY_SERVICE": "ItemLedgerEntries"
+
+    // Secrets, set with `npx wrangler secret put <NAME>` (never here):
+    //   MEDUSA_ADMIN_API_KEY  - Medusa secret API key (sk_...)
+    //   BC_CLIENT_SECRET      - Entra ID app client secret
+    //   MIDDLEWARE_ADMIN_TOKEN - bearer token for /api/middleware/*
   }
 }

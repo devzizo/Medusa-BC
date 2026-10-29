@@ -1,0 +1,21 @@
+# Copy to .dev.vars for `npx wrangler dev` (it is git-ignored). In production set the
+# secrets with `npx wrangler secret put <NAME>`; never put them in wrangler.jsonc.
+
+# --- Medusa ---
+# Medusa Admin > Settings > Secret API Keys. Sent as "Authorization: Basic <key>".
+MEDUSA_ADMIN_API_KEY=sk_replace_me
+
+# --- Business Central ---
+# Client secret of the Entra ID app registered in BC (Microsoft Entra Applications).
+BC_CLIENT_SECRET=replace_me
+
+# --- Middleware ---
+# Bearer token for /api/middleware/*. Any long random string.
+MIDDLEWARE_ADMIN_TOKEN=replace_me
+
+# Non-secret settings normally live in wrangler.jsonc "vars"; they can be overridden here:
+# BC_ENVIRONMENT_URL=https://api.businesscentral.dynamics.com/v2.0/<tenant>/Production
+# BC_TENANT_ID=
+# BC_CLIENT_ID=
+# BC_COMPANY_ID=
+# BC_AUTHORITY_URL=http://localhost:9555
