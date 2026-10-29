@@ -5,13 +5,26 @@ Cloudflare Workers. It syncs Business Central into Medusa from outside Medusa.
 
 Live: https://medusa-bc.dev-zizo.workers.dev
 
-- `public/index.html` — the admin page (Arabic, RTL), one tab per feature. The first tab,
-  **فحص الاتصال (Connection)**, takes the middleware token and shows a Business Central section and a
-  Medusa section, each listing its settings (set / missing) with a "check connection" button.
-- `src/index.js` — serves the page and routes `/api/middleware/*`.
-- `src/config.js` — the Medusa and BC token settings and the middleware API (below).
-- `docs/PRD.md` — the full spec: architecture, settings, sync rules, acceptance criteria.
-- `.claude/skills/medusa-bc-middleware/SKILL.md` — how to build and verify it (for Claude Code).
+The admin page (`public/index.html`, Arabic, RTL) has four tabs, the same tools the in-Medusa plugin had:
+
+1. **الإعدادات (Settings)** — connection checks for Business Central and Medusa, the BC company
+   (chosen from BC's own list; changing it clears both mappings), the posting groups (Store VAT Bus.
+   Post. Gr., Gen. Business Posting Group) and the price list web service names.
+2. **ربط المستودعات (Locations)** — each Medusa stock location → one BC location.
+3. **طرق الدفع (Payment methods)** — each Medusa payment provider → one BC payment method.
+4. **مزامنة الأصناف (Item sync)** — categories, non-blocked items with variants and unit price, and
+   active sales price lists, BC → Medusa. New products are drafts; a product whose item left BC is
+   rejected (and back to draft if it returns); a clashing SKU is skipped. Runs on the server.
+
+Code:
+
+- `src/index.js` — serves the page, routes `/api/middleware/*`, exports the Durable Object.
+- `src/api.js` — the API behind the page.
+- `src/store.js` — Durable Object `MiddlewareStore` (SQLite): settings, mappings, sync runs.
+- `src/sync/items.js` — the item sync, as steps under a subrequest budget driven by alarms.
+- `src/lib/bc.js`, `src/lib/medusa.js`, `src/lib/map.js` — BC client, Medusa Admin client, the pure
+  mapping rules (ported from the plugin, tested in `test/`: `npm test`).
+- `docs/PRD.md` — the full spec. `.claude/skills/medusa-bc-middleware/SKILL.md` — how to work on it.
 
 Never put the Medusa secret `sk_` key, the BC client secret or the middleware token in this repo.
 
@@ -26,16 +39,27 @@ and Secrets**. `wrangler.jsonc` sets `keep_vars`, so deploys never overwrite the
 | `BC_TENANT_ID` | Text | Entra tenant id |
 | `BC_CLIENT_ID` | Text | Entra app (client) id |
 | `BC_CLIENT_SECRET` | Secret | Entra app client secret |
-| `BC_COMPANY_ID` | Text | Company id (the BC check lists them) |
 | `MEDUSA_BACKEND_URL` | Text | Set in `wrangler.jsonc`: `https://hoven-sa.medusajs.app` |
 | `MEDUSA_ADMIN_API_KEY` | Secret | Medusa Admin → Settings → Secret API Keys (`sk_...`) |
 | `MIDDLEWARE_ADMIN_TOKEN` | Secret, optional | Only if the page should ask for a token |
+| `SYNC_STEP_BUDGET` | Text, optional | Calls per sync step (default 40; up to ~900 on a paid plan) |
+
+The company is chosen in the Settings tab, not here.
 
 Secrets can also be set with `npx wrangler secret put <NAME>`. Never commit any of them.
 
 Locally, copy `.dev.vars.example` to `.dev.vars` (git-ignored).
 
-### Check the connection
+### Deploy
+
+```bash
+npx wrangler deploy
+```
+
+The Durable Object is created by its first `wrangler deploy` (a migration); `wrangler versions upload`
+cannot create it, so a preview version alone is not enough the first time.
+
+### API
 
 Open the admin page, or call the API. **Protect the page with Cloudflare Access** (Worker → Settings →
 Domains & Routes): the API has no login of its own unless the optional `MIDDLEWARE_ADMIN_TOKEN`
@@ -43,9 +67,13 @@ secret is set, in which case every call needs `Authorization: Bearer <token>` an
 
 | Route | Does |
 |---|---|
-| `GET /api/middleware/status` | Which settings are set or missing (never a secret's value). |
+| `GET /api/middleware/status` | Env settings (set / missing, never a secret's value) and the saved settings. |
 | `POST /api/middleware/check/medusa` | Calls `GET /admin/stores` with the Medusa secret key. |
-| `POST /api/middleware/check/bc` | Gets a fresh Entra token, lists BC companies, confirms `BC_COMPANY_ID`. |
+| `POST /api/middleware/check/bc` | Fresh Entra token, BC companies, whether the chosen one is there. |
+| `POST /api/middleware/company` | `{ company_id }` from BC's list; clears both mappings when it changes. |
+| `POST /api/middleware/settings` | Posting groups and price list service names. |
+| `GET/POST /api/middleware/mappings/{locations,payments}` | Both lists live, and the saved mapping; POST `{ mappings: [{ id, code }] }`. |
+| `GET /api/middleware/items/runs`, `POST /api/middleware/items/run` | Item sync history; start a run. |
 
 ## Deploy
 

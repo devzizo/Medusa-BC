@@ -13,7 +13,8 @@ A Cloudflare Worker, outside Medusa, that:
 
 - reads Business Central (API v2.0 + published OData pages) with an Entra ID client-credentials token;
 - writes Medusa through its Admin API with a secret key (`sk_…`);
-- keeps its own state (mappings, runs) in D1, and splits long runs into Queue batches.
+- keeps its own state (settings, mappings, runs) in one Durable Object with SQLite (`src/store.js`),
+  and runs a long sync as alarm-driven steps under a call budget (`src/sync/items.js`).
 
 It replaces the in-Medusa plugin `@hoven/medusa-bc` (repo `devzizo/essentials-starter`, branch `alpha`,
 `packages/medusa-bc`). That plugin's `src/lib/import/map.ts`, `src/lib/inventory/map.ts` and
@@ -49,7 +50,12 @@ It replaces the in-Medusa plugin `@hoven/medusa-bc` (repo `devzizo/essentials-st
    create it, link it, then switch it on.
 7. **Gone from BC → rejected, back → draft.** An empty BC item list rejects nothing.
 8. **One run at a time** across item and inventory syncs; a run older than 2 h is dead, mark it failed.
-9. Mappings name one BC company's codes: a company or environment change clears them.
+9. Mappings name one BC company's codes: a company change clears them.
+10. **Every step stays under the subrequest budget** (`SYNC_STEP_BUDGET`, default 40; the free plan
+    allows 50 per invocation). A stage must save its cursor before it returns, and never start a
+    product it cannot finish within what is left.
+11. **LS Central may own prices.** If Medusa answers "Prices are managed in LS Central", write the rest
+    without prices and skip price lists; do not treat it as a failure.
 
 ## How to verify (before any deploy)
 

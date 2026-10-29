@@ -5,12 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Medusa-BC</title>
   <style>
-    :root { --bg: #f6f5f1; --panel: #fff; --text: #141414; --muted: #6b6b6b; --line: #e3e0d8; --accent: #294036; --ok: #1f6b3a; --okbg: #e8f3ec; --err: #9b2c1f; --errbg: #f8ebe8; }
+    :root { --bg: #f6f5f1; --panel: #fff; --text: #141414; --muted: #6b6b6b; --line: #e3e0d8; --accent: #294036; --ok: #1f6b3a; --okbg: #e8f3ec; --err: #9b2c1f; --errbg: #f8ebe8; --warn: #8a5a00; --warnbg: #fbf1dc; }
     * { box-sizing: border-box; }
     body { margin: 0; background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, "Segoe UI", Tahoma, sans-serif; line-height: 1.6; }
     header { background: var(--panel); border-bottom: 1px solid var(--line); }
     .bar { max-width: 1040px; margin: 0 auto; padding: 16px 16px 0; }
-    .top { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
     h1 { font-size: 1.3rem; margin: 0; }
     .sub { color: var(--muted); margin: 0; font-size: .9rem; }
     nav { display: flex; gap: 4px; margin-top: 12px; overflow-x: auto; }
@@ -18,194 +17,395 @@
     nav a[aria-current="page"] { color: var(--text); border-bottom-color: var(--accent); }
     main { max-width: 1040px; margin: 0 auto; padding: 24px 16px 64px; }
     .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 2px; padding: 20px; }
+    .panel + .panel, .grid + .panel, .panel + .grid { margin-top: 16px; }
+    .grid > .panel { margin-top: 0; }
     h2 { font-size: 1.05rem; margin: 0 0 4px; }
     .hint { color: var(--muted); font-size: .85rem; margin: 6px 0 0; }
     label { display: block; font-weight: 600; margin-bottom: 6px; }
-    .row { display: flex; gap: 8px; flex-wrap: wrap; }
-    input { flex: 1; min-width: 200px; padding: 10px 12px; font: inherit; border: 1px solid var(--line); border-radius: 2px; background: #fff; direction: ltr; text-align: left; }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    input, select { padding: 10px 12px; font: inherit; border: 1px solid var(--line); border-radius: 2px; background: #fff; }
+    input { flex: 1; min-width: 180px; direction: ltr; text-align: left; }
+    select { min-width: 220px; max-width: 100%; }
     button { padding: 10px 18px; font: inherit; font-weight: 600; border: 1px solid var(--accent); border-radius: 2px; cursor: pointer; background: var(--accent); color: #fff; }
     button.ghost { background: #fff; color: var(--accent); }
     button:disabled { opacity: .5; cursor: default; }
     .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-    .lock { margin-bottom: 16px; }
-    @media (max-width: 760px) { .grid { grid-template-columns: 1fr; } }
+    .fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 16px; margin: 12px 0 16px; }
+    .fields input { width: 100%; min-width: 0; }
+    @media (max-width: 760px) { .grid, .fields { grid-template-columns: 1fr; } }
     .side-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
-    .state { font-size: .8rem; font-weight: 600; padding: 2px 8px; border-radius: 2px; background: #f0eee8; color: var(--muted); }
+    .state { font-size: .8rem; font-weight: 600; padding: 2px 8px; border-radius: 2px; background: #f0eee8; color: var(--muted); white-space: nowrap; }
     .state.ok { background: var(--okbg); color: var(--ok); }
     .state.err { background: var(--errbg); color: var(--err); }
-    table { width: 100%; border-collapse: collapse; margin: 0 0 16px; font-size: .88rem; table-layout: fixed; }
-    td { padding: 8px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
-    td.k { font-family: ui-monospace, Menlo, Consolas, monospace; direction: ltr; text-align: left; width: 48%; word-break: break-all; padding-inline-start: 8px; }
-    td.v { direction: ltr; text-align: left; color: var(--muted); word-break: break-all; }
+    .state.warn { background: var(--warnbg); color: var(--warn); }
+    table { width: 100%; border-collapse: collapse; margin: 0 0 16px; font-size: .88rem; }
+    th { text-align: start; font-weight: 600; color: var(--muted); padding: 8px 0; border-bottom: 1px solid var(--line); }
+    td { padding: 8px 0; border-bottom: 1px solid var(--line); vertical-align: middle; }
+    .settings { table-layout: fixed; }
+    .settings td.k { font-family: ui-monospace, Menlo, Consolas, monospace; direction: ltr; text-align: left; width: 48%; word-break: break-all; padding-inline-start: 8px; }
+    .settings td.v { direction: ltr; text-align: left; color: var(--muted); word-break: break-all; }
     td[colspan] { color: var(--muted); }
+    .mono { font-family: ui-monospace, Menlo, Consolas, monospace; direction: ltr; unicode-bidi: embed; }
     .tag { display: inline-block; padding: 0 8px; border-radius: 2px; font-size: .78rem; font-weight: 600; }
     .tag.set { background: var(--okbg); color: var(--ok); }
     .tag.missing { background: var(--errbg); color: var(--err); }
     .result { margin-top: 12px; padding: 12px 14px; border-radius: 2px; display: none; word-break: break-word; }
     .result.ok { display: block; background: var(--okbg); color: var(--ok); }
     .result.err { display: block; background: var(--errbg); color: var(--err); }
-    .result ul { margin: 8px 0 0; padding-inline-start: 20px; color: var(--text); }
-    .result code { direction: ltr; unicode-bidi: embed; font-size: .85rem; }
     .error { color: var(--err); margin: 12px 0 0; }
+    .notice { color: var(--muted); }
+    details summary { cursor: pointer; margin-top: 8px; }
+    details ul { margin: 8px 0 0; padding-inline-start: 20px; font-size: .85rem; }
+    .run { padding: 12px 0; border-top: 1px solid var(--line); }
+    .run:first-of-type { border-top: 0; }
+    .summary td { padding: 4px 0; }
+    .summary td:last-child { text-align: end; font-variant-numeric: tabular-nums; }
     footer { margin-top: 24px; color: var(--muted); font-size: .85rem; }
   </style>
 </head>
 <body>
   <header>
     <div class="bar">
-      <div class="top">
-        <div>
-          <h1>Medusa-BC</h1>
-          <p class="sub">الوسيط بين متجر Medusa و Microsoft Dynamics 365 Business Central</p>
-        </div>
-      </div>
+      <h1>Medusa-BC</h1>
+      <p class="sub">الوسيط بين متجر Medusa و Microsoft Dynamics 365 Business Central</p>
       <!-- One link per feature; each section below is shown for its hash. -->
       <nav aria-label="الأقسام">
-        <a href="#connection" data-tab="connection" data-testid="nav-connection">فحص الاتصال</a>
+        <a href="#settings" data-tab="settings" data-testid="nav-settings">الإعدادات</a>
+        <a href="#locations" data-tab="locations" data-testid="nav-locations">ربط المستودعات</a>
+        <a href="#payments" data-tab="payments" data-testid="nav-payments">طرق الدفع</a>
+        <a href="#items" data-tab="items" data-testid="nav-items">مزامنة الأصناف</a>
       </nav>
     </div>
   </header>
 
   <main>
-    <section data-view="connection" data-testid="view-connection">
-      <!-- Shown only when the Worker has MIDDLEWARE_ADMIN_TOKEN set (the API answers 401). -->
-      <div class="panel lock" id="lock" hidden data-testid="lock">
-        <label for="token">توكن الوسيط (MIDDLEWARE_ADMIN_TOKEN)</label>
-        <div class="row">
-          <input id="token" type="password" autocomplete="off" placeholder="الصق التوكن هنا" data-testid="token">
-          <button id="load" data-testid="load">دخول</button>
-        </div>
-        <p class="hint">يبقى في هذا التبويب من المتصفح فقط، ويُمسح عند إغلاقه.</p>
-        <p class="error" id="token-error" hidden data-testid="token-error"></p>
+    <!-- Shown only when the Worker has MIDDLEWARE_ADMIN_TOKEN set (the API answers 401). -->
+    <div class="panel" id="lock" hidden data-testid="lock" style="margin-bottom:16px">
+      <label for="token">توكن الوسيط (MIDDLEWARE_ADMIN_TOKEN)</label>
+      <div class="row">
+        <input id="token" type="password" autocomplete="off" placeholder="الصق التوكن هنا" data-testid="token">
+        <button id="unlock" data-testid="unlock">دخول</button>
       </div>
+    </div>
 
-      <p class="error" id="load-error" hidden data-testid="load-error"></p>
+    <!-- ===== Settings ===== -->
+    <section data-view="settings" data-testid="view-settings">
       <div class="grid">
         <div class="panel" data-testid="side-bc">
-          <div class="side-head">
-            <h2>Business Central</h2>
-            <span class="state" id="state-bc" data-testid="state-bc">لم يُفحص</span>
-          </div>
-          <table><tbody id="settings-bc"><tr><td colspan="2">جارٍ التحميل…</td></tr></tbody></table>
-          <button id="check-bc" class="ghost" disabled data-testid="check-bc">فحص الاتصال بـ Business Central</button>
+          <div class="side-head"><h2>Business Central</h2><span class="state" id="state-bc" data-testid="state-bc">لم يُفحص</span></div>
+          <table class="settings"><tbody id="settings-bc"><tr><td colspan="2">جارٍ التحميل…</td></tr></tbody></table>
+          <button id="check-bc" class="ghost" data-testid="check-bc">فحص الاتصال</button>
           <div class="result" id="result-bc" data-testid="result-bc"></div>
         </div>
-
         <div class="panel" data-testid="side-medusa">
-          <div class="side-head">
-            <h2>Medusa</h2>
-            <span class="state" id="state-medusa" data-testid="state-medusa">لم يُفحص</span>
-          </div>
-          <table><tbody id="settings-medusa"><tr><td colspan="2">جارٍ التحميل…</td></tr></tbody></table>
-          <button id="check-medusa" class="ghost" disabled data-testid="check-medusa">فحص الاتصال بـ Medusa</button>
+          <div class="side-head"><h2>Medusa</h2><span class="state" id="state-medusa" data-testid="state-medusa">لم يُفحص</span></div>
+          <table class="settings"><tbody id="settings-medusa"><tr><td colspan="2">جارٍ التحميل…</td></tr></tbody></table>
+          <button id="check-medusa" class="ghost" data-testid="check-medusa">فحص الاتصال</button>
           <div class="result" id="result-medusa" data-testid="result-medusa"></div>
         </div>
       </div>
 
-      <footer>الإعدادات تُضبط من Cloudflare: Workers &amp; Pages ← medusa-bc ← Settings ← Variables and Secrets. الأسرار لا تظهر هنا أبدًا.</footer>
+      <div class="panel" data-testid="company-panel">
+        <h2>الشركة</h2>
+        <p class="hint">الشركة في Business Central التي يعمل عليها الوسيط. تغييرها يمسح ربط المستودعات وطرق الدفع.</p>
+        <div class="row" style="margin-top:12px">
+          <select id="company" data-testid="company"><option value="">— اختر الشركة —</option></select>
+          <button id="load-companies" class="ghost" data-testid="load-companies">تحديث القائمة</button>
+          <button id="save-company" data-testid="save-company" disabled>حفظ الشركة</button>
+        </div>
+        <p class="hint" id="company-current" data-testid="company-current"></p>
+        <div class="result" id="result-company" data-testid="result-company"></div>
+      </div>
+
+      <div class="panel" data-testid="posting-panel">
+        <h2>Posting groups وصفحات الأسعار</h2>
+        <div class="fields">
+          <div><label for="vat_bus_posting_group"><bdi>Store VAT Bus. Post. Gr.</bdi></label><input id="vat_bus_posting_group" data-testid="vat-bus" placeholder="DOMESTIC"></div>
+          <div><label for="gen_bus_posting_group"><bdi>Gen. Business Posting Group</bdi></label><input id="gen_bus_posting_group" data-testid="gen-bus" placeholder="DOMESTIC"></div>
+          <div><label for="price_list_service"><bdi>Sales Price Lists (7016) web service</bdi></label><input id="price_list_service" data-testid="price-list-service"></div>
+          <div><label for="price_list_line_service"><bdi>Price List Lines (7001) web service</bdi></label><input id="price_list_line_service" data-testid="price-list-line-service"></div>
+        </div>
+        <p class="hint">مجموعة VAT تحدد قوائم الأسعار الشاملة للضريبة المقبولة للمتجر، والمجموعة العامة محفوظة للمستندات. أسماء الصفحات فارغة = الأسماء الظاهرة.</p>
+        <div class="row" style="margin-top:12px"><button id="save-settings" data-testid="save-settings">حفظ</button></div>
+        <div class="result" id="result-settings" data-testid="result-settings"></div>
+      </div>
+      <footer>بيانات الاتصال من Cloudflare: Workers &amp; Pages ← medusa-bc ← Settings ← Variables and Secrets. الأسرار لا تظهر هنا أبدًا.</footer>
+    </section>
+
+    <!-- ===== Mappings (filled by the same code) ===== -->
+    <section data-view="locations" data-testid="view-locations" hidden>
+      <div class="panel" data-mapping="locations">
+        <h2>ربط المستودعات</h2>
+        <p class="hint">كل مستودع (Stock location) في Medusa يُربط بمستودع (Location) واحد في Business Central.</p>
+        <div data-body></div>
+      </div>
+    </section>
+    <section data-view="payments" data-testid="view-payments" hidden>
+      <div class="panel" data-mapping="payments">
+        <h2>طرق الدفع</h2>
+        <p class="hint">كل طريقة دفع (Payment provider) في Medusa تُربط بطريقة دفع (Payment method) في Business Central، وهي التي يسجّلها BC للطلبات المدفوعة بها.</p>
+        <div data-body></div>
+      </div>
+    </section>
+
+    <!-- ===== Item sync ===== -->
+    <section data-view="items" data-testid="view-items" hidden>
+      <div class="panel">
+        <h2>مزامنة الأصناف</h2>
+        <p class="hint">
+          تستورد من الشركة المختارة: الفئات، والأصناف غير المحظورة مع المتغيرات وسعر الوحدة، وقوائم أسعار البيع النشطة.
+          المنتجات الجديدة تُنشأ مسودة (draft). الإعادة تحدّث ولا تكرر. الصنف الذي حُذف من BC أو صار محظورًا يصير rejected، ويعود draft إن رجع.
+          الصنف الذي رقمه (SKU) مستعمل لمنتج آخر يُتخطى ويُذكر. تعمل في الخادم خطوة خطوة، ولا تحتاج بقاء الصفحة مفتوحة.
+        </p>
+        <div class="row" style="margin-top:12px">
+          <button id="run-items" data-testid="run-items">بدء المزامنة</button>
+          <span class="notice" id="items-notice" data-testid="items-notice"></span>
+        </div>
+        <div class="result" id="result-items" data-testid="result-items"></div>
+      </div>
+      <div class="panel">
+        <h2>السجل</h2>
+        <div id="runs" data-testid="runs"><p class="notice">لا يوجد تشغيل بعد.</p></div>
+      </div>
     </section>
   </main>
 
   <script>
     const $ = (id) => document.getElementById(id);
+    const escape = (text) => String(text ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+    const show = (box, ok, html) => { box.innerHTML = html; box.className = `result ${ok ? "ok" : "err"}`; };
 
-    // Tabs: the hash picks the section; an unknown hash falls back to the first tab.
+    // ---- API: optional token, asked for only when the Worker answers 401 ----
+    const KEY = "medusa-bc-token";
+    try { $("token").value = sessionStorage.getItem(KEY) ?? ""; } catch {}
+    class Locked extends Error {}
+    const api = async (path, body) => {
+      const token = $("token").value.trim();
+      const res = await fetch(`/api/middleware/${path}`, {
+        method: body ? "POST" : "GET",
+        headers: { ...(token ? { authorization: `Bearer ${token}` } : {}), ...(body ? { "content-type": "application/json" } : {}) },
+        body: body ? JSON.stringify(body) : undefined,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 401) { $("lock").hidden = false; throw new Locked(token ? "التوكن غير صحيح." : "اكتب توكن الوسيط."); }
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      return data;
+    };
+    $("unlock").addEventListener("click", () => {
+      try { sessionStorage.setItem(KEY, $("token").value.trim()); } catch {}
+      $("lock").hidden = true;
+      loadSettings().then(showTab);
+    });
+
+    // ---- Tabs: the hash picks the section ----
+    const loaders = {};
     const showTab = () => {
       const links = [...document.querySelectorAll("nav a[data-tab]")];
       const wanted = location.hash.slice(1);
-      const current = links.some((link) => link.dataset.tab === wanted) ? wanted : links[0].dataset.tab;
-      for (const link of links) {
-        if (link.dataset.tab === current) link.setAttribute("aria-current", "page");
-        else link.removeAttribute("aria-current");
-      }
+      const current = links.some((l) => l.dataset.tab === wanted) ? wanted : links[0].dataset.tab;
+      for (const link of links) link.dataset.tab === current ? link.setAttribute("aria-current", "page") : link.removeAttribute("aria-current");
       for (const view of document.querySelectorAll("[data-view]")) view.hidden = view.dataset.view !== current;
+      loaders[current]?.();
     };
     addEventListener("hashchange", showTab);
-    showTab();
 
-    const KEY = "medusa-bc-token";
-    try { $("token").value = sessionStorage.getItem(KEY) ?? ""; } catch {}
-
-    const escape = (text) => String(text).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
-
-    class Locked extends Error {}
-
-    const call = async (path, method = "GET") => {
-      const token = $("token").value.trim();
-      try { sessionStorage.setItem(KEY, token); } catch {}
-      const res = await fetch(path, { method, headers: token ? { authorization: `Bearer ${token}` } : {} });
-      const body = await res.json().catch(() => ({}));
-      if (res.status === 401) throw new Locked(token ? "التوكن غير صحيح." : "");
-      if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
-      return body;
-    };
-
-    const renderSettings = (target, rows) => {
+    // ---- Settings tab ----
+    const FIELDS = ["vat_bus_posting_group", "gen_bus_posting_group", "price_list_service", "price_list_line_service"];
+    let saved = {};
+    const renderEnv = (target, rows) => {
       $(target).innerHTML = rows.map((row) => `
-        <tr>
-          <td class="k">${escape(row.name)}</td>
-          <td class="v">${row.set ? '<span class="tag set">مضبوط</span>' : '<span class="tag missing">ناقص</span>'}
-            ${!row.secret && row.value ? " " + escape(row.value) : ""}${row.secret && row.set ? " (سرّي)" : ""}</td>
-        </tr>`).join("");
+        <tr><td class="k">${escape(row.name)}</td>
+        <td class="v">${row.set ? '<span class="tag set">مضبوط</span>' : '<span class="tag missing">ناقص</span>'}
+          ${!row.secret && row.value ? " " + escape(row.value) : ""}${row.secret && row.set ? " (سرّي)" : ""}</td></tr>`).join("");
+    };
+    const syncSaveButton = () => { $("save-company").disabled = !$("company").value || $("company").value === saved.company_id; };
+    const renderCompanies = (companies) => {
+      $("company").innerHTML = `<option value="">— اختر الشركة —</option>` +
+        companies.map((c) => `<option value="${escape(c.id)}" ${c.id === saved.company_id ? "selected" : ""}>${escape(c.displayName)}</option>`).join("");
+      syncSaveButton();
+    };
+    // Until BC's list is loaded, the saved company is the one option shown.
+    const showSavedCompanyOption = () => {
+      if ($("company").options.length > 1 || !saved.company_id) return;
+      renderCompanies([{ id: saved.company_id, displayName: saved.company_display_name || saved.company_name }]);
+    };
+    const showCompany = () => {
+      $("company-current").textContent = saved.company_id ? `المحفوظة: ${saved.company_display_name || saved.company_name}` : "لم تُختر شركة بعد. افحص اتصال Business Central لتظهر الشركات.";
     };
 
-    // Settings load on their own. The token panel appears only if the API
-    // asks for one, i.e. MIDDLEWARE_ADMIN_TOKEN is set in Cloudflare.
-    const load = async () => {
-      $("token-error").hidden = true;
-      $("load-error").hidden = true;
-      $("load").disabled = true;
+    const loadSettings = async () => {
       try {
-        const { settings } = await call("/api/middleware/status");
-        renderSettings("settings-bc", settings.bc);
-        renderSettings("settings-medusa", settings.medusa);
-        $("check-bc").disabled = false;
-        $("check-medusa").disabled = false;
-        $("lock").hidden = true;
+        const data = await api("status");
+        saved = data.saved;
+        renderEnv("settings-bc", data.settings.bc);
+        renderEnv("settings-medusa", data.settings.medusa);
+        for (const key of FIELDS) $(key).value = saved[key] ?? "";
+        showSavedCompanyOption();
+        $("price_list_service").placeholder = data.defaults.price_list_service;
+        $("price_list_line_service").placeholder = data.defaults.price_list_line_service;
+        showCompany();
       } catch (error) {
-        if (error instanceof Locked) {
-          $("lock").hidden = false;
-          $("token-error").textContent = error.message;
-          $("token-error").hidden = !error.message;
-        } else {
-          $("load-error").textContent = `تعذّر قراءة الإعدادات: ${error.message}`;
-          $("load-error").hidden = false;
-        }
-      } finally {
-        $("load").disabled = false;
+        if (!(error instanceof Locked)) show($("result-bc"), false, escape(`تعذّر قراءة الإعدادات: ${error.message}`));
       }
     };
-    $("load").addEventListener("click", load);
-    load();
 
     const check = (side) => async () => {
-      const button = $(`check-${side}`);
-      const box = $(`result-${side}`);
       const state = $(`state-${side}`);
-      button.disabled = true;
-      box.className = "result";
-      state.textContent = "جارٍ الفحص…";
-      state.className = "state";
+      state.textContent = "جارٍ الفحص…"; state.className = "state";
       try {
-        const result = await call(`/api/middleware/check/${side}`, "POST");
-        const companies = (result.companies ?? [])
-          .map((c) => `<li>${escape(c.displayName)} — <code>${escape(c.id)}</code></li>`).join("");
-        box.innerHTML = `<bdi>${escape(result.message)}</bdi>${companies ? `<ul>${companies}</ul>` : ""}`;
-        box.className = `result ${result.ok ? "ok" : "err"}`;
-        state.textContent = result.ok ? "متصل" : "غير متصل";
-        state.className = `state ${result.ok ? "ok" : "err"}`;
+        const result = await api(`check/${side}`, {});
+        show($(`result-${side}`), result.ok, `<bdi>${escape(result.message)}</bdi>`);
+        state.textContent = result.ok ? "متصل" : (result.companies ? "اختر الشركة" : "غير متصل");
+        state.className = `state ${result.ok ? "ok" : result.companies ? "warn" : "err"}`;
+        if (result.companies) renderCompanies(result.companies);
       } catch (error) {
-        if (error instanceof Locked) $("lock").hidden = false;
-        box.textContent = error.message || "اكتب توكن الوسيط أولًا.";
-        box.className = "result err";
-        state.textContent = "غير متصل";
-        state.className = "state err";
-      } finally {
-        button.disabled = false;
+        show($(`result-${side}`), false, escape(error.message));
+        state.textContent = "غير متصل"; state.className = "state err";
       }
     };
     $("check-bc").addEventListener("click", check("bc"));
     $("check-medusa").addEventListener("click", check("medusa"));
+    $("load-companies").addEventListener("click", check("bc"));
+    $("company").addEventListener("change", syncSaveButton);
+
+    $("save-company").addEventListener("click", async () => {
+      const chosen = $("company").selectedOptions[0]?.textContent;
+      if (saved.company_id && !confirm(`تغيير الشركة إلى «${chosen}» يمسح ربط المستودعات وطرق الدفع. متابعة؟`)) return;
+      try {
+        const result = await api("company", { company_id: $("company").value });
+        saved = result.settings;
+        showCompany();
+        syncSaveButton();
+        show($("result-company"), true, escape(`حُفظت الشركة «${saved.company_display_name}».${result.cleared ? " مُسح الربط السابق." : ""}`));
+        check("bc")();
+      } catch (error) {
+        show($("result-company"), false, escape(error.message));
+      }
+    });
+
+    $("save-settings").addEventListener("click", async () => {
+      try {
+        saved = (await api("settings", Object.fromEntries(FIELDS.map((k) => [k, $(k).value])))).saved;
+        show($("result-settings"), true, "حُفظ.");
+      } catch (error) {
+        show($("result-settings"), false, escape(error.message));
+      }
+    });
+
+    // ---- Mapping tabs (locations, payments) ----
+    const LABELS = {
+      locations: { medusa: "مستودع Medusa", bc: "مستودع Business Central", none: "لا توجد مستودعات في Medusa (Settings ← Locations & Shipping)." },
+      payments: { medusa: "طريقة الدفع في Medusa", bc: "طريقة الدفع في Business Central", none: "لا توجد طرق دفع في Medusa." },
+    };
+    const loadMapping = (kind) => async () => {
+      const body = document.querySelector(`[data-mapping="${kind}"] [data-body]`);
+      const label = LABELS[kind];
+      body.innerHTML = `<p class="notice">جارٍ التحميل…</p>`;
+      let data;
+      try {
+        data = await api(`mappings/${kind}`);
+      } catch (error) {
+        body.innerHTML = `<p class="error">${escape(error.message)}</p>`;
+        return;
+      }
+      const savedCodes = new Map(data.saved.map((m) => [m.id, m.code]));
+      const bcCodes = new Set(data.bc.map((b) => b.code));
+      const errors = [data.errors.bc && `Business Central: ${data.errors.bc}`, data.errors.medusa && `Medusa: ${data.errors.medusa}`].filter(Boolean);
+      const rows = data.medusa.map((m) => {
+        const code = savedCodes.get(m.id) ?? "";
+        // A saved code BC no longer returns stays visible, flagged.
+        const missing = code && !bcCodes.has(code);
+        return `<tr><td>${escape(m.name)}</td><td>
+          <select data-id="${escape(m.id)}" data-testid="map-${kind}-${escape(m.id)}">
+            <option value="">غير مربوط</option>
+            ${missing ? `<option value="${escape(code)}" selected>${escape(code)} (غير موجود في BC)</option>` : ""}
+            ${data.bc.map((b) => `<option value="${escape(b.code)}" ${b.code === code ? "selected" : ""}>${escape(b.code)} — ${escape(b.displayName)}</option>`).join("")}
+          </select>${missing ? ' <span class="state warn">غير موجود في BC</span>' : ""}</td></tr>`;
+      }).join("");
+      body.innerHTML = `
+        ${errors.map((e) => `<p class="error">${escape(e)}</p>`).join("")}
+        ${data.medusa.length ? `<table><thead><tr><th>${label.medusa}</th><th>${label.bc}</th></tr></thead><tbody>${rows}</tbody></table>` : `<p class="notice">${label.none}</p>`}
+        <div class="row"><button data-save data-testid="save-${kind}" disabled>حفظ الربط</button><span class="notice" data-changes></span></div>
+        <div class="result" data-result data-testid="result-${kind}"></div>`;
+      const selects = [...body.querySelectorAll("select[data-id]")];
+      const changed = () => selects.filter((s) => s.value !== (savedCodes.get(s.dataset.id) ?? ""));
+      const refresh = () => {
+        const n = changed().length;
+        body.querySelector("[data-save]").disabled = !n;
+        body.querySelector("[data-changes]").textContent = n ? `${n} تغيير غير محفوظ` : "";
+      };
+      selects.forEach((s) => s.addEventListener("change", refresh));
+      body.querySelector("[data-save]").addEventListener("click", async () => {
+        try {
+          const result = await api(`mappings/${kind}`, { mappings: changed().map((s) => ({ id: s.dataset.id, code: s.value || null })) });
+          savedCodes.clear();
+          result.saved.forEach((m) => savedCodes.set(m.id, m.code));
+          refresh();
+          show(body.querySelector("[data-result]"), true, "حُفظ الربط.");
+        } catch (error) {
+          show(body.querySelector("[data-result]"), false, escape(error.message));
+        }
+      });
+    };
+    loaders.locations = loadMapping("locations");
+    loaders.payments = loadMapping("payments");
+
+    // ---- Item sync tab ----
+    const SUMMARY = [
+      ["bc_categories", "فئات في BC"], ["categories_created", "فئات أُنشئت"], ["categories_updated", "فئات تغيّر اسمها"],
+      ["bc_items", "أصناف في BC (غير محظورة)"], ["bc_variants", "متغيرات في BC"],
+      ["products_created", "منتجات أُنشئت (draft)"], ["products_updated", "منتجات حُدّثت"], ["products_skipped", "أصناف تُخطيت"],
+      ["products_rejected", "منتجات صارت rejected"],
+      ["bc_price_lists", "قوائم أسعار في BC"], ["price_lists_created", "قوائم أُنشئت"], ["price_lists_updated", "قوائم حُدّثت"],
+      ["price_lists_deactivated", "قوائم أُوقفت"], ["price_list_prices", "أسعار في القوائم"], ["issues", "ملاحظات"],
+    ];
+    const STAGES = { read: "قراءة BC", categories: "الفئات", products: "المنتجات", reject: "المحذوفة من BC", priceListsRead: "قراءة قوائم الأسعار", variantIds: "ربط المتغيرات", priceLists: "قوائم الأسعار" };
+    const STATUS = { running: ["جارٍ", "warn"], succeeded: ["نجحت", "ok"], failed: ["فشلت", "err"] };
+    let polling = null;
+    const renderRuns = (runs) => {
+      if (!runs.length) { $("runs").innerHTML = `<p class="notice">لا يوجد تشغيل بعد.</p>`; return; }
+      $("runs").innerHTML = runs.map((run, index) => {
+        const [text, cls] = STATUS[run.status] ?? [run.status, ""];
+        const summary = index === 0 ? SUMMARY.filter(([k]) => run.summary[k] !== undefined)
+          .map(([k, l]) => `<tr><td>${l}</td><td>${escape(run.summary[k])}</td></tr>`).join("") : "";
+        const issues = index === 0 && run.issues.length ? `<details><summary>الملاحظات (${run.issues.length})</summary><ul>${run.issues
+          .map((i) => `<li><span class="mono">${escape(i.ref)}</span>: <bdi>${escape(i.message)}</bdi></li>`).join("")}</ul></details>` : "";
+        return `<div class="run" ${index === 0 ? 'data-testid="last-run"' : ""}>
+          <div class="row"><span class="state ${cls}">${text}${run.status === "running" ? ` — ${STAGES[run.stage] ?? run.stage}` : ""}</span>
+          <span class="notice">${new Date(run.started_at).toLocaleString("ar-SA-u-nu-latn")}</span></div>
+          ${run.error ? `<p class="error"><bdi>${escape(run.error)}</bdi></p>` : ""}
+          ${summary ? `<table class="summary">${summary}</table>` : ""}${issues}</div>`;
+      }).join("");
+    };
+    const loadRuns = async () => {
+      try {
+        const { runs } = await api("items/runs");
+        renderRuns(runs);
+        const running = runs.some((r) => r.status === "running");
+        $("run-items").disabled = running;
+        clearTimeout(polling);
+        if (running && !document.querySelector('[data-view="items"]').hidden) polling = setTimeout(loadRuns, 2000);
+      } catch (error) {
+        if (!(error instanceof Locked)) show($("result-items"), false, escape(error.message));
+      }
+    };
+    loaders.items = async () => {
+      $("items-notice").textContent = saved.company_id ? `الشركة: ${saved.company_display_name || saved.company_name}` : "اختر الشركة في الإعدادات أولًا.";
+      loadRuns();
+    };
+    $("run-items").addEventListener("click", async () => {
+      $("run-items").disabled = true;
+      try {
+        await api("items/run", {});
+        $("result-items").className = "result";
+        loadRuns();
+      } catch (error) {
+        show($("result-items"), false, escape(error.message));
+        $("run-items").disabled = false;
+      }
+    });
+
+    loadSettings().then(showTab);
   </script>
 </body>
 </html>

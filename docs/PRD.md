@@ -52,23 +52,27 @@ service that can be deployed, paused and rolled back on its own.
 ## 4. Architecture
 
 ```
-            ┌───────────────────────────── Cloudflare ─────────────────────────────┐
- Admin ───► │  Worker (HTTP)  ──► Queue ──► Worker (consumer) ──► D1 (state, logs)│
- (browser)  │      ▲                                   │   │                       │
-            │  Cron Trigger ───────────────────────────┘   │                       │
-            └───────────────────────────────────────────────┼───────────────────────┘
-                                                            │
-                     Medusa Admin API (sk_ secret key) ◄────┤
-                     Business Central API v2.0 + OData ◄────┘  (Entra ID token)
+            ┌──────────────────────── Cloudflare ────────────────────────┐
+ Admin ───► │  Worker (HTTP: page + /api/middleware/*)                     │
+ (browser)  │      │                                                       │
+            │      ▼                                                       │
+            │  Durable Object "MiddlewareStore" (SQLite + alarms)          │
+            │   settings · mappings · runs · work queue                    │
+            └──────────────┬───────────────────────────────────────────────┘
+                           │
+                     Medusa Admin API (sk_ secret key)
+                     Business Central API v2.0 + OData (Entra ID token)
 ```
 
-- **Worker (HTTP)**: settings/status API, mapping API, "start run" endpoints, and the admin page
-  (static assets in `public/`, one tab per feature; the first is "Connection").
-- **Cron Triggers**: scheduled item and inventory syncs.
-- **Queues**: a run is split into batches (e.g. 50 products per message). One Worker invocation has
-  CPU time and subrequest limits; a catalog of thousands of items must never be one invocation.
-  (Cloudflare Workflows is an acceptable alternative to Queues; choose one, not both.)
-- **D1**: settings that are not secrets, mappings, BC↔Medusa id map, run log. Schema in §8.
+- **Worker (HTTP)**: the admin page (static assets in `public/`, one tab per feature: Settings,
+  Locations, Payment methods, Item sync) and the API in `src/api.js`.
+- **Durable Object `MiddlewareStore`** (`src/store.js`, SQLite storage): everything the page saves and
+  every sync run. Built instead of D1 + Queues because it needs no resource created in advance (the
+  deploy creates it), is strongly consistent, and its **alarms** drive a long run on the server.
+- **Steps under a call budget**: one invocation may make 50 subrequests on the free plan. A sync is a
+  chain of steps (`src/sync/items.js`); each makes at most `SYNC_STEP_BUDGET` calls (default 40),
+  saves where it stopped, and sets an alarm for the next. Nothing depends on the page staying open.
+- **Cron Triggers** (later): start scheduled runs through the same Durable Object.
 - **Secrets** (Wrangler secrets, never in git): Medusa secret key, BC client secret, middleware admin token.
 
 ## 5. Settings (tokens and connection)
@@ -160,15 +164,15 @@ list pages over OData.
 
 | Mapping | Medusa side | BC side | Stored |
 |---|---|---|---|
-| Locations | `GET /admin/stock-locations` | `/companies({id})/locations` | D1 `location_map` |
-| Payment methods | `GET /admin/payments/payment-providers` | `/companies({id})/paymentMethods` (page 427) | D1 `payment_map` |
+| Locations | `GET /admin/stock-locations` | `/companies({id})/locations` | `location_map` |
+| Payment methods | `GET /admin/payments/payment-providers` | `/companies({id})/paymentMethods` (page 427) | `payment_map` |
 
 Saving checks both sides against the live lists. Changing `BC_COMPANY_ID` or the BC environment
 clears both mappings (they name another company's codes).
 
 ### 6.4 Order export (phase 2, Medusa → BC)
 
-- Trigger: cron polls `GET /admin/orders?updated_at[$gt]=<cursor>`; cursor in D1.
+- Trigger: cron polls `GET /admin/orders?updated_at[$gt]=<cursor>`; cursor in the Durable Object.
 - Creates a BC `salesOrders` (or `salesInvoices`) with customer, lines by SKU → item/variant,
   location from the fulfillment's stock location map, payment method from the payment map, posting
   groups from settings. Idempotent by `externalDocumentNumber = medusa order display id`.
@@ -199,6 +203,10 @@ Medusa 2.19 facts that cost time:
   orphans variant values).
 - Prices are stored in the major unit (`98` = 98 SAR). Never ×/÷ 100. The store sells in SAR only.
 - Workflow errors come back as JSON `{ type, message }`; show `message`.
+- **With LS Central switched on, Medusa refuses price writes over the admin API** ("Prices are managed in
+  LS Central…", the `@hoven/ls-central` guard on product, variant and price-list routes). Only creating a
+  product may carry prices. The item sync then writes everything else without prices, notes it once,
+  and skips price lists for that run. Measured on a local Medusa with the plugin, both switched on and off.
 
 ### 7.2 Business Central API v2.0
 
@@ -218,18 +226,19 @@ captions with `_` (`Item_No`, `Location_Code`, `Remaining_Quantity`); price list
 `Asset_*` on older and `Product_*` on newer versions, so read both. Pages differ per tenant: detect
 columns, never assume them.
 
-## 8. Data (D1)
+## 8. Data (Durable Object SQLite, `src/store.js`)
 
 ```sql
-CREATE TABLE setting      (key TEXT PRIMARY KEY, value TEXT NOT NULL);           -- non-secret, UI-editable
+CREATE TABLE setting      (key TEXT PRIMARY KEY, value TEXT);   -- company, posting groups, page names
 CREATE TABLE location_map (stock_location_id TEXT PRIMARY KEY, bc_company_id TEXT NOT NULL,
                            bc_location_code TEXT NOT NULL, bc_location_name TEXT);
 CREATE TABLE payment_map  (payment_provider_id TEXT PRIMARY KEY, bc_company_id TEXT NOT NULL,
                            bc_payment_method_code TEXT NOT NULL, bc_payment_method_name TEXT);
-CREATE TABLE run          (id TEXT PRIMARY KEY, kind TEXT CHECK (kind IN ('items','inventory','orders')),
-                           status TEXT CHECK (status IN ('running','succeeded','failed')),
-                           started_at TEXT NOT NULL, finished_at TEXT, summary TEXT, issues TEXT, error TEXT);
-CREATE TABLE cursor       (name TEXT PRIMARY KEY, value TEXT NOT NULL);           -- phase 2 order polling
+CREATE TABLE run          (id TEXT PRIMARY KEY, kind TEXT NOT NULL, status TEXT NOT NULL,
+                           started_at TEXT NOT NULL, finished_at TEXT, state TEXT NOT NULL,
+                           summary TEXT NOT NULL, issues TEXT NOT NULL, error TEXT);
+CREATE TABLE work         (run_id TEXT, kind TEXT, seq INTEGER, key TEXT, payload TEXT, result TEXT,
+                           PRIMARY KEY (run_id, kind, seq));  -- one row per category/product/price list
 ```
 
 No id map table is needed in phase 1: BC identity is carried in Medusa handles, SKUs and metadata.

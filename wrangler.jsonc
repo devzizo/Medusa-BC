@@ -3,6 +3,8 @@
   "name": "medusa-bc",
   "main": "src/index.js",
   "compatibility_date": "2026-10-01",
+  // node:crypto (sha256 for handles of Arabic BC codes).
+  "compatibility_flags": ["nodejs_compat"],
   // Keep variables set in the dashboard across deploys.
   "keep_vars": true,
   "assets": {
@@ -11,6 +13,12 @@
     // the binding any unknown path threw (Cloudflare error 1101) instead of 404.
     "binding": "ASSETS"
   },
+  // The middleware's own state (settings chosen in the page, mappings, sync
+  // runs): one Durable Object with SQLite storage, nothing to create first.
+  "durable_objects": {
+    "bindings": [{ "name": "STORE", "class_name": "MiddlewareStore" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["MiddlewareStore"] }],
   "vars": {
     "MEDUSA_BACKEND_URL": "https://hoven-sa.medusajs.app"
 
