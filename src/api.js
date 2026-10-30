@@ -16,8 +16,8 @@ import { DEFAULT_PRICE_LIST_LINE_SERVICE, DEFAULT_PRICE_LIST_SERVICE } from "./s
 //   GET  /api/middleware/price-lists              BC's sales price lists, and which can be imported
 //   GET  /api/middleware/orders?offset=           Medusa orders, newest first, with what was posted to BC
 //   POST /api/middleware/orders/:id/sync          post one order to BC as a sales order (by hand)
-//   GET  /api/middleware/mappings/{locations,payments}
-//   POST /api/middleware/mappings/{locations,payments}   { mappings: [{ id, code|null }] }
+//   GET  /api/middleware/mappings/{locations,payments,shipping}
+//   POST /api/middleware/mappings/{locations,payments,shipping}   { mappings: [{ id, code|null }] }
 //   GET  /api/middleware/{items,categories,images,inventory,customers}/runs
 //   POST /api/middleware/{items,categories,images,inventory,customers}/run
 
@@ -43,9 +43,26 @@ const MAPPINGS = {
       })),
     bc: (env, companyId) => listBcPaymentMethods(bcCredentials(env), companyId),
   },
+  // Shipping Agents (page 428) are not in API v2.0: read over OData from the published page.
+  shipping: {
+    medusa: async (env) =>
+      (await medusaClient(env).listAll("/admin/shipping-options", "shipping_options", { fields: "id,name,service_zone.name" })).map((o) => ({
+        id: o.id,
+        name: o.service_zone?.name ? `${o.name} (${o.service_zone.name})` : o.name,
+      })),
+    bc: async (env, companyId, settings) =>
+      (await listBcODataRows(bcCredentials(env), settings.company_name, settings.shipping_agent_service || DEFAULT_SHIPPING_AGENT_SERVICE).catch((error) => {
+        throw new Error(`${error.message} (web service "${settings.shipping_agent_service || DEFAULT_SHIPPING_AGENT_SERVICE}": publish page 428 Shipping Agents)`);
+      }))
+        .filter((row) => row.Code)
+        .map((row) => ({ id: "", code: row.Code, displayName: row.Name || row.Code })),
+  },
 };
 
+export const DEFAULT_SHIPPING_AGENT_SERVICE = "ShippingAgents";
+
 const PUBLIC_SETTINGS = [
+  "shipping_agent_service",
   "vat_bus_posting_group",
   "gen_bus_posting_group",
   "price_list_service",
@@ -77,6 +94,7 @@ export async function middlewareApi(request, env, pathname) {
         price_list_service: DEFAULT_PRICE_LIST_SERVICE,
         price_list_line_service: DEFAULT_PRICE_LIST_LINE_SERVICE,
         inventory_service: DEFAULT_INVENTORY_SERVICE,
+        shipping_agent_service: DEFAULT_SHIPPING_AGENT_SERVICE,
       },
     });
   }
@@ -144,13 +162,14 @@ export async function middlewareApi(request, env, pathname) {
     return result.error ? fail(result.error, 409) : json(result);
   }
 
-  const mapping = pathname.match(/^\/api\/middleware\/mappings\/(locations|payments)$/);
+  const mapping = pathname.match(/^\/api\/middleware\/mappings\/(locations|payments|shipping)$/);
   if (mapping) {
     const kind = mapping[1];
-    const companyId = (await db.getSettings()).company_id;
+    const settings = await db.getSettings();
+    const companyId = settings.company_id;
     if (!companyId) return fail("Choose a Business Central company in Settings first.", 409);
     if (method === "GET") {
-      const [medusa, bc] = await Promise.allSettled([MAPPINGS[kind].medusa(env), MAPPINGS[kind].bc(env, companyId)]);
+      const [medusa, bc] = await Promise.allSettled([MAPPINGS[kind].medusa(env), MAPPINGS[kind].bc(env, companyId, settings)]);
       return json({
         medusa: medusa.status === "fulfilled" ? medusa.value : [],
         bc: bc.status === "fulfilled" ? bc.value : [],
@@ -164,7 +183,7 @@ export async function middlewareApi(request, env, pathname) {
     if (method === "POST") {
       const rows = Array.isArray(body.mappings) ? body.mappings.slice(0, 500) : [];
       // Both sides are checked against the live lists: a mapping can only name things that exist.
-      const [medusa, bc] = await Promise.all([MAPPINGS[kind].medusa(env), MAPPINGS[kind].bc(env, companyId)]).catch((error) => [error]);
+      const [medusa, bc] = await Promise.all([MAPPINGS[kind].medusa(env), MAPPINGS[kind].bc(env, companyId, settings)]).catch((error) => [error]);
       if (medusa instanceof Error) return fail(errorMessage(medusa), 502);
       const medusaIds = new Set(medusa.map((row) => row.id));
       const bcByCode = new Map(bc.map((row) => [row.code, row]));
