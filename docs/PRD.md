@@ -208,6 +208,11 @@ Sub-tab "الصور" under Item sync, run kind `images`.
 Saving checks both sides against the live lists. Changing `BC_COMPANY_ID` or the BC environment
 clears both mappings (they name another company's codes).
 
+- **Shipping:** each Medusa shipping option → one BC Shipping Agent (`shipping_map`). Shipping
+  Agents (page 428) are not in API v2.0: read over OData from the published page (setting
+  `shipping_agent_service`, default `ShippingAgents`; columns `Code`, `Name`). Not yet written on
+  sales orders: API v2.0 sales orders have no shipping agent field.
+
 ### 6.4 Order posting (Medusa → BC sales order) — `src/sync/orders.js`, `src/lib/orders.js`
 
 By hand only: the Orders tab lists Medusa orders (20 a page, newest first, filter by state) with a

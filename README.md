@@ -14,6 +14,8 @@ The admin page (`public/index.html`, Arabic, RTL) has five tabs, the same tools 
    one cannot be imported).
 2. **ربط المستودعات (Locations)** — each Medusa stock location → one BC location.
 3. **طرق الدفع (Payment methods)** — each Medusa payment provider → one BC payment method.
+   **طرق الشحن (Shipping)** — each Medusa shipping option → one BC **Shipping Agent** (page 428, read
+   over OData: publish it in Web Services; the name is in Settings, default `ShippingAgents`).
 4. **مزامنة الأصناف (Item sync)**, with two sub-tabs. **الفئات (Categories)** pulls BC's item categories
    into Medusa alone (create, rename, never duplicate). **المنتجات (Products)** is the full sync: categories, non-blocked items with variants and unit price, and
    active sales price lists, BC → Medusa. New products are drafts; a clashing SKU is skipped. **Every
@@ -106,7 +108,7 @@ secret is set, in which case every call needs `Authorization: Bearer <token>` an
 | `GET /api/middleware/orders?offset=` | 20 Medusa orders, newest first, each with what was posted to BC. |
 | `POST /api/middleware/orders/:id/sync` | Posts that order to BC as a sales order (by hand). |
 | `GET /api/middleware/price-lists` | BC's sales price lists, each with whether the sync can import it and why not. |
-| `GET/POST /api/middleware/mappings/{locations,payments}` | Both lists live, and the saved mapping; POST `{ mappings: [{ id, code }] }`. |
+| `GET/POST /api/middleware/mappings/{locations,payments,shipping}` | Both lists live, and the saved mapping; POST `{ mappings: [{ id, code }] }`. |
 | `GET /api/middleware/{items,categories,images,inventory,customers}/runs`, `POST …/run` | `{ total, runs }`: the last 10 runs, each with its `number`; start a run (one at a time). |
 
 ## Deploy

@@ -28,6 +28,7 @@ export const SETTING_KEYS = [
   "price_list_service",
   "price_list_line_service",
   "inventory_service",
+  "shipping_agent_service",
   // Order posting (Orders tab): default BC customer, shipping line, default location, BC's local currency.
   "order_customer_number",
   "order_shipping_type",
@@ -43,6 +44,7 @@ export const SETTING_KEYS = [
 
 const MAPPINGS = {
   locations: { table: "location_map", key: "stock_location_id", code: "bc_location_code", name: "bc_location_name" },
+  shipping: { table: "shipping_map", key: "shipping_option_id", code: "bc_shipping_agent_code", name: "bc_shipping_agent_name" },
   payments: { table: "payment_map", key: "payment_provider_id", code: "bc_payment_method_code", name: "bc_payment_method_name" },
 };
 
@@ -54,6 +56,8 @@ export class MiddlewareStore extends DurableObject {
       CREATE TABLE IF NOT EXISTS setting (key TEXT PRIMARY KEY, value TEXT);
       CREATE TABLE IF NOT EXISTS location_map (stock_location_id TEXT PRIMARY KEY, bc_company_id TEXT NOT NULL,
         bc_location_code TEXT NOT NULL, bc_location_name TEXT);
+      CREATE TABLE IF NOT EXISTS shipping_map (shipping_option_id TEXT PRIMARY KEY, bc_company_id TEXT NOT NULL,
+        bc_shipping_agent_code TEXT NOT NULL, bc_shipping_agent_name TEXT);
       CREATE TABLE IF NOT EXISTS payment_map (payment_provider_id TEXT PRIMARY KEY, bc_company_id TEXT NOT NULL,
         bc_payment_method_code TEXT NOT NULL, bc_payment_method_name TEXT);
       CREATE TABLE IF NOT EXISTS run (id TEXT PRIMARY KEY, kind TEXT NOT NULL, status TEXT NOT NULL,
@@ -92,6 +96,7 @@ export class MiddlewareStore extends DurableObject {
       if (previous !== company.id) {
         this.sql.exec("DELETE FROM location_map");
         this.sql.exec("DELETE FROM payment_map");
+        this.sql.exec("DELETE FROM shipping_map");
       }
       this.saveSettings({ company_id: company.id, company_name: company.name, company_display_name: company.displayName });
     });

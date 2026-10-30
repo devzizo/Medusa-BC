@@ -62,6 +62,9 @@
     table.orders td, table.orders th { padding: 8px 8px 8px 0; vertical-align: top; }
     table.orders button { padding: 6px 14px; }
     select { max-width: 100%; }
+    /* Long BC names (e.g. shipping agents) must not widen the page on a phone. */
+    [data-mapping] table { table-layout: fixed; width: 100%; }
+    [data-mapping] select { width: 100%; min-width: 0; box-sizing: border-box; }
     #price-lists { overflow-x: auto; }
     .run { padding: 12px 0; border-top: 1px solid var(--line); }
     .run:first-of-type { border-top: 0; }
@@ -87,6 +90,7 @@
         <a href="#settings" data-tab="settings" data-testid="nav-settings">الإعدادات</a>
         <a href="#locations" data-tab="locations" data-testid="nav-locations">ربط المستودعات</a>
         <a href="#payments" data-tab="payments" data-testid="nav-payments">طرق الدفع</a>
+        <a href="#shipping" data-tab="shipping" data-testid="nav-shipping">طرق الشحن</a>
         <a href="#items" data-tab="items" data-testid="nav-items">مزامنة الأصناف</a>
         <a href="#inventory" data-tab="inventory" data-testid="nav-inventory">مزامنة المخزون</a>
         <a href="#customers" data-tab="customers" data-testid="nav-customers">نقل العملاء</a>
@@ -124,7 +128,7 @@
 
       <div class="panel" data-testid="company-panel">
         <h2>الشركة</h2>
-        <p class="hint">الشركة في Business Central التي يعمل عليها الوسيط. تغييرها يمسح ربط المستودعات وطرق الدفع.</p>
+        <p class="hint">الشركة في Business Central التي يعمل عليها الوسيط. تغييرها يمسح ربط المستودعات وطرق الدفع والشحن.</p>
         <div class="row" style="margin-top:12px">
           <select id="company" data-testid="company"><option value="">— اختر الشركة —</option></select>
           <button id="load-companies" class="ghost" data-testid="load-companies">تحديث القائمة</button>
@@ -142,6 +146,7 @@
           <div><label for="price_list_service"><bdi>Sales Price Lists (7016) web service</bdi></label><input id="price_list_service" data-testid="price-list-service"></div>
           <div><label for="price_list_line_service"><bdi>Price List Lines (7001) web service</bdi></label><input id="price_list_line_service" data-testid="price-list-line-service"></div>
           <div><label for="inventory_service"><bdi>Item Ledger Entries (38) web service</bdi></label><input id="inventory_service" data-testid="inventory-service"></div>
+          <div><label for="shipping_agent_service"><bdi>Shipping Agents (428) web service</bdi></label><input id="shipping_agent_service" data-testid="shipping-agent-service"></div>
         </div>
         <p class="hint">مجموعة VAT تحدد قوائم الأسعار الشاملة للضريبة المقبولة للمتجر، والمجموعة العامة محفوظة للمستندات. الصفحات تُنشر في BC من Web Services؛ الاسم الفارغ = الاسم الظاهر.</p>
         <div class="row" style="margin-top:12px"><button id="save-settings" data-testid="save-settings">حفظ</button></div>
@@ -173,6 +178,15 @@
       <div class="panel" data-mapping="payments">
         <h2>طرق الدفع</h2>
         <p class="hint">كل طريقة دفع (Payment provider) في Medusa تُربط بطريقة دفع (Payment method) في Business Central، وهي التي يسجّلها BC للطلبات المدفوعة بها.</p>
+        <div data-body></div>
+      </div>
+    </section>
+
+    <section data-view="shipping" data-testid="view-shipping" hidden>
+      <div class="panel" data-mapping="shipping">
+        <h2>طرق الشحن</h2>
+        <p class="hint">كل طريقة شحن (Shipping option) في Medusa تُربط بوكيل شحن (Shipping Agent) في Business Central.
+          وكلاء الشحن تُقرأ من صفحة 428 «Shipping Agents» منشورة في Web Services (الاسم في الإعدادات).</p>
         <div data-body></div>
       </div>
     </section>
@@ -379,7 +393,7 @@
     addEventListener("hashchange", showTab);
 
     // ---- Settings tab ----
-    const FIELDS = ["vat_bus_posting_group", "gen_bus_posting_group", "price_list_service", "price_list_line_service", "inventory_service"];
+    const FIELDS = ["vat_bus_posting_group", "gen_bus_posting_group", "price_list_service", "price_list_line_service", "inventory_service", "shipping_agent_service"];
     let saved = {};
     let medusaUrl = "";
     const renderEnv = (target, rows) => {
@@ -417,6 +431,7 @@
         $("price_list_service").placeholder = data.defaults.price_list_service;
         $("price_list_line_service").placeholder = data.defaults.price_list_line_service;
         $("inventory_service").placeholder = data.defaults.inventory_service;
+        $("shipping_agent_service").placeholder = data.defaults.shipping_agent_service;
         chosenLists = parseChosen(saved.price_lists);
         document.querySelector(`[name=price_list_mode][value=${chosenLists ? "chosen" : "all"}]`).checked = true;
         showCompany();
@@ -446,7 +461,7 @@
 
     $("save-company").addEventListener("click", async () => {
       const chosen = $("company").selectedOptions[0]?.textContent;
-      if (saved.company_id && !confirm(`تغيير الشركة إلى «${chosen}» يمسح ربط المستودعات وطرق الدفع. متابعة؟`)) return;
+      if (saved.company_id && !confirm(`تغيير الشركة إلى «${chosen}» يمسح ربط المستودعات وطرق الدفع والشحن. متابعة؟`)) return;
       try {
         const result = await api("company", { company_id: $("company").value });
         saved = result.settings;
@@ -533,6 +548,7 @@
     // ---- Mapping tabs (locations, payments) ----
     const LABELS = {
       locations: { medusa: "مستودع Medusa", bc: "مستودع Business Central", none: "لا توجد مستودعات في Medusa (Settings ← Locations & Shipping)." },
+      shipping: { medusa: "طريقة الشحن في Medusa", bc: "وكيل الشحن في Business Central", none: "لا توجد طرق شحن في Medusa." },
       payments: { medusa: "طريقة الدفع في Medusa", bc: "طريقة الدفع في Business Central", none: "لا توجد طرق دفع في Medusa." },
     };
     const loadMapping = (kind) => async () => {
@@ -587,6 +603,7 @@
     };
     loaders.locations = loadMapping("locations");
     loaders.payments = loadMapping("payments");
+    loaders.shipping = loadMapping("shipping");
 
     // ---- Sync tabs (items, inventory, customers): run button and history ----
     const SYNCS = {
