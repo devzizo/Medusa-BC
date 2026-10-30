@@ -1,6 +1,6 @@
 import { bcCredentials, listBcItemCategories, listBcItems, listBcItemVariants, listBcODataRows } from "../lib/bc.js";
 import { makeBudget, medusaClient } from "../lib/medusa.js";
-import { mapCategories, mapItems, mapPriceLists } from "../lib/map.js";
+import { barcodeIndex, hsCodeIndex, mapCategories, mapItems, mapPriceLists } from "../lib/map.js";
 
 // The item sync, BC → Medusa: categories, items that are not blocked (with
 // their variants and unit price), and active sales price lists, the same
@@ -76,7 +76,8 @@ async function read({ ctx, medusa, bc, budget }) {
   const { sales_channels } = await medusa.get("/admin/sales-channels", { limit: 1, fields: "id" });
   const { shipping_profiles } = await medusa.get("/admin/shipping-profiles", { type: "default", limit: 1, fields: "id" });
 
-  const mapped = mapItems(bcItems, bcVariants, currency.toLowerCase(), { draftZeroInventory });
+  const extras = await readBarcodesAndHsCodes(ctx, bc, bcItems, options);
+  const mapped = mapItems(bcItems, bcVariants, currency.toLowerCase(), { draftZeroInventory, ...extras });
   mapped.issues.forEach(ctx.note);
   ctx.putWork("category", mapCategories(bcCategories).map((category) => ({ key: category.handle, payload: category })));
   ctx.putWork("product", mapped.products.map((product) => ({ key: product.handle, payload: product })));
@@ -95,6 +96,52 @@ async function read({ ctx, medusa, bc, budget }) {
     products_drafted_zero_inventory: 0,
   });
   next(state, "categories");
+}
+
+export const DEFAULT_ITEM_REFERENCE_SERVICE = "ItemReferences";
+export const DEFAULT_ITEM_CARD_SERVICE = "ItemCard";
+
+/**
+ * Only the columns a published page really has: naming one it lacks is a 400
+ * (rule 4). Null when a column it cannot do without is missing.
+ */
+async function readColumns(ctx, bc, service, needed, optional, options) {
+  const { settings } = ctx;
+  const [sample] = await listBcODataRows(bc, settings.company_name, service, "$top=1", options).catch((error) => {
+    throw new Error(`${error.message} (web service "${service}")`);
+  });
+  if (!sample) return [];
+  const missing = needed.filter((column) => !(column in sample));
+  if (missing.length) throw new Error(`web service "${service}" has no ${missing.join(", ")} column`);
+  const select = [...needed, ...optional.filter((column) => column in sample)].join(",");
+  return listBcODataRows(bc, settings.company_name, service, `$select=${select}`, options);
+}
+
+/**
+ * Barcodes (Item References, page 5737) and HS codes (Item Card, page 30):
+ * neither is in API v2.0. A page that is not published is noted and the sync
+ * goes on: barcodes then come from the item's GTIN, and HS codes stay as they are.
+ */
+async function readBarcodesAndHsCodes(ctx, bc, items, options) {
+  const { settings, summary } = ctx;
+  const extras = {};
+  const baseUnits = new Map(items.map((item) => [item.number, item.baseUnitOfMeasureCode ?? ""]));
+  try {
+    const rows = await readColumns(ctx, bc, settings.item_reference_service || DEFAULT_ITEM_REFERENCE_SERVICE,
+      ["Item_No", "Reference_Type", "Reference_No"], ["Variant_Code", "Unit_of_Measure", "Discontinue_Bar_Code"], options);
+    extras.barcodes = barcodeIndex(rows, baseUnits);
+    summary.bc_barcodes = extras.barcodes.size;
+  } catch (error) {
+    ctx.note({ kind: "barcode_source", ref: "Item References", message: `Barcodes not read: ${error.message}. Is page 5737 Item Reference Entries published under that name? Items without variants use their GTIN.` });
+  }
+  try {
+    const rows = await readColumns(ctx, bc, settings.item_card_service || DEFAULT_ITEM_CARD_SERVICE, ["No", "Tariff_No"], [], options);
+    extras.hsCodes = hsCodeIndex(rows);
+    summary.bc_hs_codes = extras.hsCodes.size;
+  } catch (error) {
+    ctx.note({ kind: "hs_code_source", ref: "Item Card", message: `HS codes not read: ${error.message}. Is page 30 Item Card published under that name? HS codes stay as they are.` });
+  }
+  return extras;
 }
 
 // The category sync's read: BC's categories only.
@@ -263,6 +310,7 @@ async function updateProduct(ctx, medusa, product, current, categoryId) {
   await medusa.post(`/admin/products/${current.id}`, {
     title: product.title,
     subtitle: product.subtitle ?? null,
+    ...(product.hs_code ? { hs_code: product.hs_code } : {}),
     metadata: product.metadata,
     ...(categoryId ? { categories: [{ id: categoryId }] } : {}),
     // Blocked or out of stock in BC (per the options): a draft. Rejected by an
@@ -277,6 +325,7 @@ async function updateProduct(ctx, medusa, product, current, categoryId) {
     await withPrices(ctx, (body) => medusa.post(`/admin/products/${current.id}/variants/${id}`, body), {
       title: variant.title,
       ...(variant.barcode ? { barcode: variant.barcode } : {}),
+      ...(variant.hs_code ? { hs_code: variant.hs_code } : {}),
       metadata: variant.metadata,
       prices: variant.prices,
     });

@@ -143,6 +143,7 @@ list pages over OData.
 | Options (Settings) | **Blocked items not imported** (default on; off = imported as drafts). **Zero stock in BC → draft** (default on): the item's `inventory` from API v2.0, the total over all BC locations; an item with no figure is never drafted for stock. A product that comes back in stock is not republished: publishing stays the admin's call. |
 | Price lists | Chosen in **Settings** (`price_lists`): `""` = every active sales list, or a JSON array of codes; a list not chosen counts as not offered (an existing one becomes draft). Only Status Active, Price Type Sale. Lists VAT-inclusive for another VAT Bus. Posting Group are skipped. Lines: skip Discount amount type, other units of measure, items/variants not imported. Blank variant code = all variants. Minimum Quantity > 1 → `min_quantity`. Date `0001-01-01` = none. Matched by `metadata.bc_price_list_code`; a list BC no longer offers → draft. |
 | Idempotent | Re-running updates, never duplicates. Variant ids are kept (orders reference them). |
+| Barcode / HS code | Barcode = Item Reference (page 5737, `Reference_Type` Bar Code, not discontinued, base unit or blank) for the item and variant; an item without variants falls back to its GTIN, and the GTIN is never copied onto several variants. HS code = Item Card (page 30) `Tariff_No`, on the product and every variant. Both pages are read over OData with detected columns; one that is not published is noted and the run goes on. |
 | Metadata | Product/variant: `bc_item_id`, `bc_item_number`, unit of measure, GTIN, posting groups, last modified. |
 
 ### 6.1a Category sync
@@ -236,6 +237,13 @@ By hand only: the Orders tab lists Medusa orders (20 a page, newest first, filte
   claim stops two clicks posting at once. The page flags a BC total that differs from Medusa's.
 - Not sent: payment (API v2.0 sales orders take no payment method; the payment mapping is kept for
   posting payments later).
+- **BC → Medusa after posting:** BC's sales order (while it exists), posted shipments and invoices
+  for `MED-<n>` are summarized (`Draft`/`Open`/`Released`, partly/fully shipped, `Invoiced`; done
+  when invoiced and every invoice is Paid) and written on the Medusa order's metadata
+  (`bc_sales_order`, `bc_status`, `bc_shipments`, `bc_invoices`, `bc_posted_at`, `bc_updated_at`),
+  only when it changed. Triggers: right after posting (a failure there never undoes the posting),
+  the "تحديث من BC" button, and a cron every 15 minutes (6 orders per run, least recently checked
+  first, done orders skipped). Medusa's own order, payment and fulfilment status are never changed.
 
 ### 6.5 Runs and the admin page
 

@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import { expect } from "./expect.js";
-import { mapCategories, mapItems, mapPriceLists } from "../src/lib/map.js";
+import { barcodeIndex, barcodeKey, hsCodeIndex, mapCategories, mapItems, mapPriceLists } from "../src/lib/map.js";
 
 const item = (overrides = {}) => ({
   id: "i-1",
@@ -185,3 +185,36 @@ describe("draftReason", async () => {
     expect(draftReason({}, { draftZeroInventory: true })).toBe(null);
   });
 });
+
+describe("barcodes and HS codes", () => {
+  it("indexes Bar Code references per item and variant, base unit only, discontinued left out", () => {
+    const index = barcodeIndex([
+      { Item_No: "1000", Variant_Code: "", Unit_of_Measure: "PCS", Reference_Type: "Bar Code", Reference_No: "6281000000001" },
+      { Item_No: "1000", Variant_Code: "", Unit_of_Measure: "BOX", Reference_Type: "Bar Code", Reference_No: "BOX-1" },
+      { Item_No: "2000", Variant_Code: "WHITE", Unit_of_Measure: "", Reference_Type: "Bar Code", Reference_No: "6281000000020" },
+      { Item_No: "2000", Variant_Code: "GREY", Reference_Type: "Bar Code", Reference_No: "OLD", Discontinue_Bar_Code: true },
+      { Item_No: "2000", Variant_Code: "GREY", Reference_Type: "Customer", Reference_No: "CUST-1" },
+    ], new Map([["1000", "PCS"], ["2000", "PCS"]]))
+    expect([...index]).toEqual([["1000|", "6281000000001"], ["2000|WHITE", "6281000000020"]])
+    expect([...hsCodeIndex([{ No: "1000", Tariff_No: "94049000" }, { No: "2000", Tariff_No: "" }])]).toEqual([["1000", "94049000"]])
+  })
+
+  it("puts each variant's own barcode on it, never the item GTIN on several variants, and the HS code everywhere", () => {
+    const items = [
+      { id: "i1", number: "1000", displayName: "Pillow", unitPrice: 10, gtin: "GTIN-1000" },
+      { id: "i2", number: "2000", displayName: "Sheet", unitPrice: 20, gtin: "GTIN-2000" },
+    ]
+    const variants = [
+      { id: "v1", itemId: "i2", code: "WHITE" },
+      { id: "v2", itemId: "i2", code: "GREY" },
+    ]
+    const { products } = mapItems(items, variants, "sar", {
+      barcodes: new Map([[barcodeKey("2000", "WHITE"), "BAR-WHITE"]]),
+      hsCodes: new Map([["2000", "63022100"]]),
+    })
+    expect(products[0].variants[0].barcode).toBe("GTIN-1000")
+    expect(products[1].hs_code).toBe("63022100")
+    expect(products[1].metadata.bc_tariff_no).toBe("63022100")
+    expect(products[1].variants.map((v) => [v.sku, v.barcode, v.hs_code])).toEqual([["2000-WHITE", "BAR-WHITE", "63022100"], ["2000-GREY", undefined, "63022100"]])
+  })
+})

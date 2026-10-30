@@ -147,6 +147,8 @@
           <div><label for="price_list_line_service"><bdi>Price List Lines (7001) web service</bdi></label><input id="price_list_line_service" data-testid="price-list-line-service"></div>
           <div><label for="inventory_service"><bdi>Item Ledger Entries (38) web service</bdi></label><input id="inventory_service" data-testid="inventory-service"></div>
           <div><label for="shipping_agent_service"><bdi>Shipping Agents (428) web service</bdi></label><input id="shipping_agent_service" data-testid="shipping-agent-service"></div>
+          <div><label for="item_reference_service"><bdi>Item Reference Entries (5737) web service</bdi> — الباركود</label><input id="item_reference_service" data-testid="item-reference-service"></div>
+          <div><label for="item_card_service"><bdi>Item Card (30) web service</bdi> — HS code</label><input id="item_card_service" data-testid="item-card-service"></div>
         </div>
         <p class="hint">مجموعة VAT تحدد قوائم الأسعار الشاملة للضريبة المقبولة للمتجر، والمجموعة العامة محفوظة للمستندات. الصفحات تُنشر في BC من Web Services؛ الاسم الفارغ = الاسم الظاهر.</p>
         <div class="row" style="margin-top:12px"><button id="save-settings" data-testid="save-settings">حفظ</button></div>
@@ -325,7 +327,8 @@
         <p class="hint">كل طلب في Medusa يُرحَّل إلى BC كـ Sales Order <strong>يدويًا بزر Sync</strong> بجانبه، لا تلقائيًا. رقمه في BC الخارجي
           <bdi class="mono">MED-رقم الطلب</bdi>، ويُبحث عنه في BC قبل الإنشاء (أمر بيع أو فاتورة مرحّلة) فلا يتكرر. العميل هو عميل BC المربوط
           (من نقل العملاء)، وإلا العميل الافتراضي أدناه. الأصناف من مزامنة الأصناف (رقم الصنف والمتغير). السعر شامل الضريبة أو بدونها حسب عميل BC.
-          إن رفض BC أي سطر يُحذف أمر البيع الناقص ويظهر السبب.</p>
+          إن رفض BC أي سطر يُحذف أمر البيع الناقص ويظهر السبب. بعد الترحيل يُكتب رقم أمر البيع وحالته في صفحة الطلب في Medusa (Metadata)،
+          وكل 15 دقيقة يُقرأ ما تغيّر في BC (اعتماد، شحن، فوترة، دفع) ويُكتب هناك أيضًا، أو فورًا بزر «تحديث من BC».</p>
         <div class="fields">
           <div><label for="order_customer_number">عميل BC الافتراضي (رقم العميل)</label><input id="order_customer_number" data-testid="order-customer" placeholder="WEB"></div>
           <div><label for="order_location_code">المستودع الافتراضي في BC</label><select id="order_location_code" data-testid="order-location"><option value="">— بلا مستودع —</option></select></div>
@@ -393,7 +396,7 @@
     addEventListener("hashchange", showTab);
 
     // ---- Settings tab ----
-    const FIELDS = ["vat_bus_posting_group", "gen_bus_posting_group", "price_list_service", "price_list_line_service", "inventory_service", "shipping_agent_service"];
+    const FIELDS = ["vat_bus_posting_group", "gen_bus_posting_group", "price_list_service", "price_list_line_service", "inventory_service", "shipping_agent_service", "item_reference_service", "item_card_service"];
     let saved = {};
     let medusaUrl = "";
     const renderEnv = (target, rows) => {
@@ -432,6 +435,8 @@
         $("price_list_line_service").placeholder = data.defaults.price_list_line_service;
         $("inventory_service").placeholder = data.defaults.inventory_service;
         $("shipping_agent_service").placeholder = data.defaults.shipping_agent_service;
+        $("item_reference_service").placeholder = data.defaults.item_reference_service;
+        $("item_card_service").placeholder = data.defaults.item_card_service;
         chosenLists = parseChosen(saved.price_lists);
         document.querySelector(`[name=price_list_mode][value=${chosenLists ? "chosen" : "all"}]`).checked = true;
         showCompany();
@@ -611,6 +616,7 @@
         summary: [
           ["bc_categories", "فئات في BC"], ["categories_created", "فئات أُنشئت"], ["categories_updated", "فئات تغيّر اسمها"],
           ["bc_items", "أصناف في BC (غير محظورة)"], ["bc_variants", "متغيرات في BC"],
+          ["bc_barcodes", "باركود من Item References"], ["bc_hs_codes", "HS code من بطاقة الصنف"],
           ["products_created", "منتجات أُنشئت (draft)"], ["products_updated", "منتجات حُدّثت"], ["products_skipped", "أصناف تُخطيت"],
           ["products_drafted", "منتجات تحولت إلى draft (handle غير موجود في BC)"],
           ["products_drafted_blocked", "تحولت إلى draft (محظورة في BC)"],
@@ -762,7 +768,14 @@
       if (!r) return `<span class="notice">لم يُرحَّل</span>`;
       if (r.status === "synced") {
         const off = r.bc_total !== null && r.medusa_total !== null && Math.abs(r.bc_total - r.medusa_total) > 0.05;
-        return `<span class="state ok">مرحّل</span> <span class="mono">${escape(r.bc_order_number)}</span><br><span class="notice">${escape(when(r.at))}</span>${
+        let detail = {};
+        try { detail = JSON.parse(r.bc_detail || "{}"); } catch {}
+        // What BC did since (the scheduled check writes it every 15 minutes; the button asks now).
+        const state = r.bc_status ? `<br><span data-testid="order-bc-status">حالته في BC: <bdi><strong>${escape(r.bc_status)}</strong></bdi></span>${
+          detail.shipments ? `<br><span class="notice">شحنات: <bdi class="mono">${escape(detail.shipments)}</bdi></span>` : ""}${
+          detail.invoices ? `<br><span class="notice">فواتير: <bdi class="mono">${escape(detail.invoices)}</bdi></span>` : ""}${
+          r.checked_at ? `<br><span class="notice">آخر تحديث من BC: ${escape(when(r.checked_at))}</span>` : ""}` : "";
+        return `<span class="state ok">مرحّل</span> <span class="mono">${escape(r.bc_order_number)}</span><br><span class="notice">${escape(when(r.at))}</span>${state}${
           off ? `<br><span class="state warn">إجمالي BC ${money(r.bc_total, o.currency_code)} ≠ Medusa</span>` : ""}`;
       }
       if (r.status === "syncing") return `<span class="state warn">جارٍ الترحيل…</span>`;
@@ -788,7 +801,9 @@
           <td class="nowrap">${money(o.total, o.currency_code)}</td>
           <td>${escape(PAY[o.payment_status] ?? o.payment_status ?? "")}${o.status === "canceled" ? ` <span class="state err">ملغى</span>` : ""}</td>
           <td data-testid="order-bc">${bcCell(o)}</td>
-          <td><button data-sync="${escape(o.id)}" data-testid="order-sync" ${synced ? "disabled" : ""}>${o.bc?.status === "failed" ? "إعادة" : "Sync"}</button></td></tr>`;
+          <td>${synced
+            ? `<button class="ghost nowrap" data-refresh="${escape(o.id)}" data-testid="order-refresh">تحديث من BC</button>`
+            : `<button data-sync="${escape(o.id)}" data-testid="order-sync">${o.bc?.status === "failed" ? "إعادة" : "Sync"}</button>`}</td></tr>`;
       }).join("")}</tbody></table>`;
     };
     const loadOrders = async () => {
@@ -826,6 +841,20 @@
     $("orders-prev").addEventListener("click", () => { orderOffset = Math.max(0, orderOffset - 20); loadOrders(); });
     $("orders-next").addEventListener("click", () => { orderOffset += 20; loadOrders(); });
     $("orders").addEventListener("click", async (event) => {
+      const refresh = event.target.closest("[data-refresh]");
+      if (refresh) {
+        const order = orderPage.orders.find((o) => o.id === refresh.dataset.refresh);
+        refresh.disabled = true;
+        refresh.textContent = "جارٍ…";
+        try {
+          order.bc = (await api(`orders/${encodeURIComponent(order.id)}/refresh`, {})).record;
+          show($("result-orders"), true, escape(`الطلب #${order.display_id}: حالته في BC «${order.bc.bc_status}»، وكُتبت في صفحة الطلب في Medusa.`));
+        } catch (error) {
+          show($("result-orders"), false, escape(error.message));
+        }
+        renderOrders();
+        return;
+      }
       const button = event.target.closest("[data-sync]");
       if (!button) return;
       const order = orderPage.orders.find((o) => o.id === button.dataset.sync);
@@ -836,7 +865,7 @@
         const result = await api(`orders/${encodeURIComponent(order.id)}/sync`, {});
         order.bc = result.record;
         show($("result-orders"), result.record.status === "synced", result.record.status === "synced"
-          ? escape(`الطلب #${order.display_id} ${result.linked ? "موجود في BC أصلًا، رُبط بـ" : "رُحّل إلى BC:"} ${result.record.bc_order_number}`)
+          ? escape(`الطلب #${order.display_id} ${result.linked ? "موجود في BC أصلًا، رُبط بـ" : "رُحّل إلى BC:"} ${result.record.bc_order_number}${result.record.warning ? ` — ${result.record.warning}` : " — وكُتب في صفحة الطلب في Medusa."}`)
           : escape(`لم يُرحَّل الطلب #${order.display_id}: ${result.record.error}`));
       } catch (error) {
         show($("result-orders"), false, escape(error.message));

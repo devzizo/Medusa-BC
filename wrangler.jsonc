@@ -19,6 +19,8 @@
     "bindings": [{ "name": "STORE", "class_name": "MiddlewareStore" }]
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["MiddlewareStore"] }],
+  // Posted orders: BC's changes (shipped, invoiced, paid) copied to Medusa.
+  "triggers": { "crons": ["*/15 * * * *"] },
   "vars": {
     "MEDUSA_BACKEND_URL": "https://hoven-sa.medusajs.app"
 

@@ -67,6 +67,12 @@ It replaces the in-Medusa plugin `@hoven/medusa-bc` (repo `devzizo/essentials-st
 14. **Orders go to BC by hand only** (Sync per order), as sales orders `MED-<n>`. Search BC (orders and
     posted invoices) before creating; on any refused line delete the half-made order. Price lines after
     the header exists: `pricesIncludeTax` comes from the BC customer.
+15. **Barcodes from Item References, HS codes from the Item Card** (OData, detected columns). Never copy
+    an item's GTIN onto several variants (Medusa refuses duplicate barcodes). A missing page is a note,
+    not a failed run.
+16. **BC's later changes reach Medusa as order metadata only** (`bc_*` keys), by button and a 15-minute
+    cron; never Medusa's order, payment or fulfilment status. The status write after posting must
+    never undo the posting.
 
 ## How to verify (before any deploy)
 

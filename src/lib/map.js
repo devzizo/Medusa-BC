@@ -59,6 +59,9 @@ export const draftReason = (item, { draftZeroInventory = false } = {}) => {
  * "original" price; price lists override it.
  */
 export const mapItems = (items, variants, currencyCode, options = {}) => {
+  // Barcodes from Item References and HS codes (Tariff No.) from the Item Card, when those pages are read.
+  const barcodes = options.barcodes ?? new Map();
+  const hsCodes = options.hsCodes ?? new Map();
   const issues = [];
   const variantsByItem = new Map();
   for (const variant of variants) {
@@ -84,10 +87,14 @@ export const mapItems = (items, variants, currencyCode, options = {}) => {
 
     const itemVariants = (variantsByItem.get(item.id) ?? []).filter((variant) => variant.code);
     const shared = { bc_item_id: item.id, bc_item_number: item.number };
+    const hsCode = hsCodes.get(item.number) || undefined;
     const productVariants = itemVariants.length
       ? itemVariants.map((variant) => ({
           title: variant.description || variant.code,
           sku: variantSku(item.number, variant.code),
+          // The item's GTIN is one code for the whole item: never copied onto several variants.
+          ...(barcodes.get(barcodeKey(item.number, variant.code)) ? { barcode: barcodes.get(barcodeKey(item.number, variant.code)) } : {}),
+          ...(hsCode ? { hs_code: hsCode } : {}),
           manage_inventory: false,
           options: { [VARIANT_OPTION]: variant.code },
           prices: price,
@@ -97,7 +104,8 @@ export const mapItems = (items, variants, currencyCode, options = {}) => {
           clean({
             title: item.displayName || item.number,
             sku: variantSku(item.number),
-            barcode: item.gtin || undefined,
+            barcode: barcodes.get(barcodeKey(item.number)) || item.gtin || undefined,
+            hs_code: hsCode,
             manage_inventory: false,
             options: { [DEFAULT_OPTION.title]: DEFAULT_OPTION.value },
             prices: price,
@@ -110,6 +118,7 @@ export const mapItems = (items, variants, currencyCode, options = {}) => {
         handle: productHandle(item.number),
         title: item.displayName || item.number,
         subtitle: item.displayName2 || undefined,
+        hs_code: hsCode,
         options: itemVariants.length
           ? [{ title: VARIANT_OPTION, values: itemVariants.map((variant) => variant.code) }]
           : [{ title: DEFAULT_OPTION.title, values: [DEFAULT_OPTION.value] }],
@@ -122,6 +131,7 @@ export const mapItems = (items, variants, currencyCode, options = {}) => {
           bc_item_category_code: item.itemCategoryCode || undefined,
           bc_base_unit_of_measure: item.baseUnitOfMeasureCode || undefined,
           bc_gtin: item.gtin || undefined,
+          bc_tariff_no: hsCode,
           bc_unit_price: item.unitPrice,
           bc_price_includes_vat: item.priceIncludesTax,
           bc_gen_prod_posting_group: item.generalProductPostingGroupCode || undefined,
@@ -135,6 +145,37 @@ export const mapItems = (items, variants, currencyCode, options = {}) => {
   }
   return { products, issues };
 };
+
+// ---- Barcodes and HS codes (OData pages: Item References 5737, Item Card 30) ----
+
+export const barcodeKey = (itemNumber, variantCode = "") => `${itemNumber}|${variantCode}`;
+
+/**
+ * Item References of type Bar Code as item|variant → barcode. A barcode for
+ * another unit of measure than the item's base unit is not the piece's, so
+ * it is left out; discontinued ones too. The first per item and variant wins.
+ */
+export const barcodeIndex = (rows, baseUnitByItem = new Map()) => {
+  const index = new Map();
+  for (const row of rows) {
+    const type = text(row, "Reference_Type").replace(/\s+/g, "").toLowerCase();
+    if (type !== "barcode") continue;
+    if (bool(row, "Discontinue_Bar_Code")) continue;
+    const itemNo = text(row, "Item_No");
+    const code = text(row, "Reference_No");
+    if (!itemNo || !code) continue;
+    const unit = text(row, "Unit_of_Measure");
+    const base = baseUnitByItem.get(itemNo);
+    if (unit && base && unit !== base) continue;
+    const key = barcodeKey(itemNo, text(row, "Variant_Code"));
+    if (!index.has(key)) index.set(key, code);
+  }
+  return index;
+};
+
+/** Item Card rows as item number → Tariff No. (the HS code). */
+export const hsCodeIndex = (rows) =>
+  new Map(rows.map((row) => [text(row, "No"), text(row, "Tariff_No")]).filter(([no, tariff]) => no && tariff));
 
 // ---- Price lists (OData pages, so field names are the page's captions) ----
 
