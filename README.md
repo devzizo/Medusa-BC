@@ -20,7 +20,10 @@ The admin page (`public/index.html`, Arabic, RTL) has five tabs, the same tools 
    into Medusa alone (create, rename, never duplicate). **المنتجات (Products)** is the full sync: categories, non-blocked items with variants and unit price, and
    active sales price lists, BC → Medusa. New products are drafts; a clashing SKU is skipped. **Every
    Medusa product whose handle matches no BC item becomes a draft**, whoever created it (BC is the
-   origin). Its options sit on the Products sub-tab: blocked items not imported; zero stock in BC → draft. A third
+   origin). Its options sit on the Products sub-tab: blocked items not imported; zero stock in BC → draft.
+   **Barcodes** come from Item References (page 5737, type Bar Code, per variant, base unit only;
+   items without variants fall back to the GTIN) and **HS codes** from the Item Card's Tariff No.
+   (page 30): neither is in API v2.0, so both pages must be published (names in Settings). A third
    sub-tab, **الصور (Images)**, moves each BC item's picture to the product the sync created, through
    Medusa's file storage (S3/R2 on Medusa Cloud): first image, and thumbnail unless the admin chose
    another; images added in Medusa stay; an unchanged picture is not uploaded again; one removed in
@@ -39,7 +42,11 @@ The admin page (`public/index.html`, Arabic, RTL) has five tabs, the same tools 
    nothing is posted twice. Customer: the BC customer the customer sync linked, else the default set
    on the tab. Lines: the BC item and variant the item sync recorded; shipping on a G/L account or
    item set on the tab. If BC refuses a line, the half-made sales order is deleted and the reason
-   shown; the BC total is compared with Medusa's.
+   shown; the BC total is compared with Medusa's. Once posted, the BC sales order number and what BC
+   does with it (released, shipped, invoiced, paid) are written on the Medusa order's metadata
+   (`bc_sales_order`, `bc_status`, `bc_shipments`, `bc_invoices`, …, shown in the order page's
+   Metadata section): right after posting, by the "تحديث من BC" button, and every 15 minutes by a
+   cron trigger until the order is invoiced and paid.
 
 Every sync tab counts its runs (#1, #2…) and shows each run's start, end and duration, and when the
 last one finished.
@@ -107,6 +114,7 @@ secret is set, in which case every call needs `Authorization: Bearer <token>` an
 | `POST /api/middleware/settings` | Posting groups, page names, chosen price lists (`price_lists`: `""` = all, or a JSON array of codes), item sync options. |
 | `GET /api/middleware/orders?offset=` | 20 Medusa orders, newest first, each with what was posted to BC. |
 | `POST /api/middleware/orders/:id/sync` | Posts that order to BC as a sales order (by hand). |
+| `POST /api/middleware/orders/:id/refresh` | Reads BC's state of a posted order and writes it on the Medusa order. |
 | `GET /api/middleware/price-lists` | BC's sales price lists, each with whether the sync can import it and why not. |
 | `GET/POST /api/middleware/mappings/{locations,payments,shipping}` | Both lists live, and the saved mapping; POST `{ mappings: [{ id, code }] }`. |
 | `GET /api/middleware/{items,categories,images,inventory,customers}/runs`, `POST …/run` | `{ total, runs }`: the last 10 runs, each with its `number`; start a run (one at a time). |

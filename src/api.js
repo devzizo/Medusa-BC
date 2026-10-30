@@ -3,8 +3,8 @@ import { mapPriceLists } from "./lib/map.js";
 import { medusaClient } from "./lib/medusa.js";
 import { checkBusinessCentral, checkMedusa, describeSettings, isAuthorized } from "./config.js";
 import { DEFAULT_INVENTORY_SERVICE } from "./sync/inventory.js";
-import { postOrder } from "./sync/orders.js";
-import { DEFAULT_PRICE_LIST_LINE_SERVICE, DEFAULT_PRICE_LIST_SERVICE } from "./sync/items.js";
+import { postOrder, refreshOrder } from "./sync/orders.js";
+import { DEFAULT_ITEM_CARD_SERVICE, DEFAULT_ITEM_REFERENCE_SERVICE, DEFAULT_PRICE_LIST_LINE_SERVICE, DEFAULT_PRICE_LIST_SERVICE } from "./sync/items.js";
 
 // The middleware API behind the admin page. Everything the page saves lives
 // in the MiddlewareStore Durable Object; connection settings come from env.
@@ -16,6 +16,7 @@ import { DEFAULT_PRICE_LIST_LINE_SERVICE, DEFAULT_PRICE_LIST_SERVICE } from "./s
 //   GET  /api/middleware/price-lists              BC's sales price lists, and which can be imported
 //   GET  /api/middleware/orders?offset=           Medusa orders, newest first, with what was posted to BC
 //   POST /api/middleware/orders/:id/sync          post one order to BC as a sales order (by hand)
+//   POST /api/middleware/orders/:id/refresh       read BC's state of a posted order, write it on the Medusa order
 //   GET  /api/middleware/mappings/{locations,payments,shipping}
 //   POST /api/middleware/mappings/{locations,payments,shipping}   { mappings: [{ id, code|null }] }
 //   GET  /api/middleware/{items,categories,images,inventory,customers}/runs
@@ -63,6 +64,8 @@ export const DEFAULT_SHIPPING_AGENT_SERVICE = "ShippingAgents";
 
 const PUBLIC_SETTINGS = [
   "shipping_agent_service",
+  "item_reference_service",
+  "item_card_service",
   "vat_bus_posting_group",
   "gen_bus_posting_group",
   "price_list_service",
@@ -95,6 +98,8 @@ export async function middlewareApi(request, env, pathname) {
         price_list_line_service: DEFAULT_PRICE_LIST_LINE_SERVICE,
         inventory_service: DEFAULT_INVENTORY_SERVICE,
         shipping_agent_service: DEFAULT_SHIPPING_AGENT_SERVICE,
+        item_reference_service: DEFAULT_ITEM_REFERENCE_SERVICE,
+        item_card_service: DEFAULT_ITEM_CARD_SERVICE,
       },
     });
   }
@@ -156,9 +161,15 @@ export async function middlewareApi(request, env, pathname) {
     const records = new Map((await db.orderRecords(data.orders.map((o) => o.id))).map((r) => [r.order_id, r]));
     return json({ count: data.count, offset, limit: 20, orders: data.orders.map((o) => ({ ...o, bc: records.get(o.id) ?? null })) });
   }
-  const orderSync = pathname.match(/^\/api\/middleware\/orders\/([^/]+)\/sync$/);
-  if (orderSync && method === "POST") {
-    const result = await postOrder(env, db, decodeURIComponent(orderSync[1])).catch((error) => ({ error: errorMessage(error) }));
+  const orderAction = pathname.match(/^\/api\/middleware\/orders\/([^/]+)\/(sync|refresh)$/);
+  if (orderAction && method === "POST") {
+    const [, id, action] = orderAction;
+    const result =
+      action === "sync"
+        ? await postOrder(env, db, decodeURIComponent(id)).catch((error) => ({ error: errorMessage(error) }))
+        : await refreshOrder(env, db, decodeURIComponent(id))
+            .then((record) => (record?.status === "synced" ? { record } : { error: "This order is not in BC yet." }))
+            .catch((error) => ({ error: errorMessage(error) }));
     return result.error ? fail(result.error, 409) : json(result);
   }
 

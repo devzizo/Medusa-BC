@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import { expect } from "./expect.js";
-import { externalNumber, mapOrderHeader, mapOrderLines } from "../src/lib/orders.js";
+import { externalNumber, mapOrderHeader, mapOrderLines, metadataChanged, orderMetadata, summarizeBcOrder } from "../src/lib/orders.js";
 
 const order = (overrides = {}) => ({
   display_id: 1042,
@@ -48,5 +48,25 @@ describe("mapOrderLines", () => {
       '"Shirt" (SKU SHIRT-S) is not a BC item: its variant has no bc_item_number.',
       'Shipping "توصيل" was charged, but no BC account or item for shipping is set (Orders tab).',
     ]);
+  });
+});
+
+describe("summarizeBcOrder", () => {
+  it("follows the order from open to shipped to invoiced and paid", () => {
+    const order = { number: "SO1001", status: "Open", fullyShipped: false, totalAmountIncludingTax: 570.5 };
+    expect(summarizeBcOrder({ order })).toMatchObject({ status: "Open", sales_order: "SO1001", shipments: "", invoices: "", done: false });
+    expect(summarizeBcOrder({ order: { ...order, status: "Released" }, shipments: [{ number: "S-SHPT1" }] }).status).toBe("Released · partly shipped");
+    expect(summarizeBcOrder({ order: { ...order, fullyShipped: true }, shipments: [{ number: "S-SHPT1" }] }).status).toBe("Open · fully shipped");
+    const invoiced = summarizeBcOrder({ shipments: [{ number: "S-SHPT1" }], invoices: [{ number: "PS-INV1", status: "Open", totalAmountIncludingTax: 570.5 }] });
+    expect(invoiced).toMatchObject({ status: "Invoiced", sales_order: null, invoices: "PS-INV1 (Open)", total: 570.5, done: false });
+    expect(summarizeBcOrder({ invoices: [{ number: "PS-INV1", status: "Paid" }] }).done).toBe(true);
+    expect(summarizeBcOrder({}).status).toBe("Not in BC (deleted?)");
+  });
+
+  it("writes flat keys on the Medusa order, and only counts a change when BC's state moved", () => {
+    const meta = orderMetadata(summarizeBcOrder({ invoices: [{ number: "PS-INV1", status: "Open" }] }), { salesOrderNumber: "SO1001", postedAt: "2026-10-30T10:00:00Z", checkedAt: "2026-10-30T11:00:00Z" });
+    expect(meta).toEqual({ bc_sales_order: "SO1001", bc_status: "Invoiced", bc_shipments: "", bc_invoices: "PS-INV1 (Open)", bc_posted_at: "2026-10-30T10:00:00Z", bc_updated_at: "2026-10-30T11:00:00Z" });
+    expect(metadataChanged({ ...meta, bc_updated_at: "earlier", other: 1 }, meta)).toBe(false);
+    expect(metadataChanged({ ...meta, bc_status: "Open" }, meta)).toBe(true);
   });
 });
