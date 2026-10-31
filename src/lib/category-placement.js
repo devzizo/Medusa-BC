@@ -30,7 +30,8 @@ export const CATEGORY_PLACEMENT = {
   // بطانيات
   "bc-cat-eba6e762": { parent: "بطانيات" }, // بطانية خفيفة
   "bc-cat-c69faabd": { parent: "بطانيات" }, // بطانية كرتون
-  // المناشف (a category of its own, apart from the robes)
+  // الارواب & المناشف (the owner, 2026-10-31: the robes go back under it)
+  "bc-cat-a0aaa2b5": { parent: "robes-and-towels" }, // أرواب
   "bc-cat-eec56857": { parent: "towels" }, // مناشف
   // المفارش
   "bc-cat-6d10286e": { parent: "مفارش" }, // مفارش عرائس
@@ -44,6 +45,10 @@ export const CATEGORY_PLACEMENT = {
   "bc-cat-0c2ffd83": { parent: "winter-bed-sheets-two-person" }, // مفارش شتوية نفرين
   // The perfume sub-category of accessories is cancelled by the owner.
   "bc-cat-perfume-3c34e589": { active: false },
+  // Hidden by the owner (2026-10-31), so the header menu stays light; products stay.
+  "bc-cat-862c202f": { active: false }, // دعاسات
+  "bc-cat-17f74fb6": { active: false }, // الغسيل
+  "bc-cat-1e57052a": { active: false }, // نظافة
 };
 
 /** The handles of the parents the placements name, for one lookup. */
