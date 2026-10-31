@@ -45,6 +45,15 @@ describe("CATEGORY_PLACEMENT", () => {
     }
   });
 
+  it("keys the owner's 2026-10-31 changes by the handles their BC codes produce", () => {
+    expect(categoryHandle("دعاسات")).toEqual("bc-cat-862c202f");
+    expect(categoryHandle("الغسيل")).toEqual("bc-cat-17f74fb6");
+    expect(categoryHandle("نظافة")).toEqual("bc-cat-1e57052a");
+    expect(categoryHandle("أرواب")).toEqual("bc-cat-a0aaa2b5");
+    for (const handle of ["bc-cat-862c202f", "bc-cat-17f74fb6", "bc-cat-1e57052a"]) expect(CATEGORY_PLACEMENT[handle]).toEqual({ active: false });
+    expect(CATEGORY_PLACEMENT["bc-cat-a0aaa2b5"]).toEqual({ parent: "robes-and-towels" });
+  });
+
   it("keeps the handle scheme the placements are keyed by", () => {
     expect(categoryHandle("PILLOWS")).toEqual("bc-cat-pillows");
   });
