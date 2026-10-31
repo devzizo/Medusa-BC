@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { plainText, textHash } from "./text.js";
 
 // Pure mapping from Business Central rows to Medusa Admin API bodies, ported
 // from the in-Medusa plugin (@hoven/medusa-bc). No I/O, so every rule is
@@ -82,6 +83,8 @@ export const mapItems = (items, variants, currencyCode, options = {}) => {
       issues.push({ kind: "price", ref: item.number, message: "No unit price in BC; imported without a price." });
     }
 
+    // The item's Marketing Text, as plain text, becomes the product's description (items.js writes it only where it is safe to)
+    const marketing = plainText(item.marketingText);
     const itemVariants = (variantsByItem.get(item.id) ?? []).filter((variant) => variant.code);
     const shared = { bc_item_id: item.id, bc_item_number: item.number };
     const productVariants = itemVariants.length
@@ -110,6 +113,7 @@ export const mapItems = (items, variants, currencyCode, options = {}) => {
         handle: productHandle(item.number),
         title: item.displayName || item.number,
         subtitle: item.displayName2 || undefined,
+        description: marketing || undefined,
         options: itemVariants.length
           ? [{ title: VARIANT_OPTION, values: itemVariants.map((variant) => variant.code) }]
           : [{ title: DEFAULT_OPTION.title, values: [DEFAULT_OPTION.value] }],
@@ -129,6 +133,7 @@ export const mapItems = (items, variants, currencyCode, options = {}) => {
           bc_last_modified: item.lastModifiedDateTime,
           bc_inventory: item.inventory,
           bc_blocked: item.blocked === true ? true : undefined,
+          bc_description_hash: marketing ? textHash(marketing) : undefined,
         },
       }),
     );
