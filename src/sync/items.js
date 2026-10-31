@@ -2,6 +2,7 @@ import { bcCredentials, listBcItemCategories, listBcItems, listBcItemVariants, l
 import { makeBudget, medusaClient } from "../lib/medusa.js";
 import { mapCategories, mapItems, mapPriceLists } from "../lib/map.js";
 import { CATEGORY_PLACEMENT, placementParents, placementPatch } from "../lib/category-placement.js";
+import { textHash } from "../lib/text.js";
 
 // The item sync, BC → Medusa: categories, items that are not blocked (with
 // their variants and unit price), and active sales price lists, the same
@@ -16,7 +17,7 @@ import { CATEGORY_PLACEMENT, placementParents, placementPatch } from "../lib/cat
 
 const BUDGET = 40;
 const PRODUCT_FIELDS =
-  "id,handle,status,variants.id,variants.sku,options.id,options.title,options.values.id,options.values.value";
+  "id,handle,status,description,metadata,variants.id,variants.sku,options.id,options.title,options.values.id,options.values.value";
 
 export const DEFAULT_PRICE_LIST_SERVICE = "SalesPriceLists";
 export const DEFAULT_PRICE_LIST_LINE_SERVICE = "PriceListLines";
@@ -95,6 +96,8 @@ async function read({ ctx, medusa, bc, budget }) {
     products_updated: 0,
     products_skipped: 0,
     products_published: 0,
+    descriptions_written: 0,
+    descriptions_kept: 0,
     products_drafted_blocked: 0,
     products_drafted_zero_inventory: 0,
   });
@@ -180,6 +183,25 @@ export const syncedStatus = (product, current, publish) => {
 
 // Calls a product costs, so a step never starts one it cannot finish.
 const productCost = (product, current) => (current ? 3 + product.variants.length : 1);
+
+/**
+ * What a product's description and metadata become on an update, from the item's Marketing Text (product.description).
+ * BC fills the description only where it cannot undo anyone's work:
+ * - no Marketing Text in BC: nothing is written, and a description is never cleared;
+ * - Medusa's description is empty, or is still exactly what the sync wrote last (its fingerprint, metadata.bc_description_hash,
+ *   still matches): it is written, so a change made in BC arrives;
+ * - anything else is the team's own text and stays (`kept`). To hand a product back to BC, empty its description.
+ * The fingerprint is sent only along with a written description, so a kept text keeps the old one.
+ */
+export const descriptionUpdate = (product, current) => {
+  const { bc_description_hash: hash, ...metadata } = product.metadata ?? {};
+  const text = product.description;
+  if (!text) return { metadata };
+  const written = current.metadata?.bc_description_hash;
+  const ours = !current.description || (written !== undefined && textHash(current.description) === written);
+  if (!ours) return { metadata, kept: true };
+  return { metadata: { ...metadata, bc_description_hash: hash }, description: text };
+};
 
 async function products({ ctx, medusa, budget }) {
   const { state, summary } = ctx;
@@ -299,11 +321,15 @@ async function withPrices(ctx, write, body) {
 // rebuilds the options from them and orphans the variants' values. Variants
 // matched by SKU keep their ids; new BC variants get their option value
 // linked to the product first (options are shared), then are created.
-async function updateProduct(ctx, medusa, product, current, categoryId, status) {
+export async function updateProduct(ctx, medusa, product, current, categoryId, status) {
+  const text = descriptionUpdate(product, current);
+  if (text.kept) ctx.summary.descriptions_kept++;
+  else if (text.description !== undefined) ctx.summary.descriptions_written++;
   await medusa.post(`/admin/products/${current.id}`, {
     title: product.title,
     subtitle: product.subtitle ?? null,
-    metadata: product.metadata,
+    metadata: text.metadata,
+    ...(text.description !== undefined ? { description: text.description } : {}),
     ...(categoryId ? { categories: [{ id: categoryId }] } : {}),
     // See syncedStatus: undefined leaves the admin's status as it is.
     ...(status && status !== current.status ? { status } : {}),
