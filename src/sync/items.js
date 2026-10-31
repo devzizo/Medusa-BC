@@ -1,6 +1,7 @@
 import { bcCredentials, listBcItemCategories, listBcItems, listBcItemVariants, listBcODataRows } from "../lib/bc.js";
 import { makeBudget, medusaClient } from "../lib/medusa.js";
 import { mapCategories, mapItems, mapPriceLists } from "../lib/map.js";
+import { CATEGORY_PLACEMENT, placementParents, placementPatch } from "../lib/category-placement.js";
 
 // The item sync, BC → Medusa: categories, items that are not blocked (with
 // their variants and unit price), and active sales price lists, the same
@@ -114,29 +115,49 @@ async function readCategories({ ctx, bc, budget }) {
 
 // ---- categories: upsert by handle ----
 
+const noteMissingParent = (ctx, handle, parentHandle) =>
+  ctx.note({ kind: "category", ref: handle, message: `Parent category "${parentHandle}" does not exist in Medusa; left where it is.` });
+
 async function categories({ ctx, medusa, budget }) {
   const { state, summary } = ctx;
   const rows = ctx.work("category", state.cursor, 25);
   if (!rows.length) return next(state, state.afterCategories ?? "products");
+  // The placements' parents are read in the same call as the categories, so nesting costs no extra request.
+  const wanted = [...rows.map((row) => row.key), ...placementParents(rows.map((row) => row.key))];
   const { product_categories: existing } = await medusa.get("/admin/product-categories", {
-    handle: rows.map((row) => row.key),
-    fields: "id,handle,name",
-    limit: rows.length,
+    handle: wanted,
+    fields: "id,handle,name,parent_category_id,is_active",
+    limit: wanted.length,
   });
   const byHandle = new Map(existing.map((category) => [category.handle, category]));
   for (const row of rows) {
-    if (budget.left() < 2) return;
+    if (budget.left() < 3) return;
     const current = byHandle.get(row.key);
     const category = row.payload;
+    const placement = CATEGORY_PLACEMENT[row.key];
+    const parent = placement?.parent ? byHandle.get(placement.parent) : undefined;
     if (!current) {
-      const { product_category } = await medusa.post("/admin/product-categories", { ...category, is_active: true, is_internal: false });
+      const { product_category } = await medusa.post("/admin/product-categories", {
+        ...category,
+        is_active: placement?.active !== false,
+        is_internal: false,
+        ...(parent ? { parent_category_id: parent.id } : {}),
+      });
       ctx.setResult("category", row.seq, { id: product_category.id });
       summary.categories_created++;
+      if (placement?.parent && !parent) noteMissingParent(ctx, row.key, placement.parent);
     } else {
       if (current.name !== category.name) {
         await medusa.post(`/admin/product-categories/${current.id}`, { name: category.name, metadata: category.metadata });
         summary.categories_updated++;
       }
+      // Where the team put it in the tree; only categories with a placement are touched.
+      const { patch, missingParent } = placementPatch(row.key, current, parent);
+      if (patch) {
+        await medusa.post(`/admin/product-categories/${current.id}`, patch);
+        summary.categories_placed = (summary.categories_placed ?? 0) + 1;
+      }
+      if (missingParent) noteMissingParent(ctx, row.key, missingParent);
       ctx.setResult("category", row.seq, { id: current.id });
     }
     state.cursor = row.seq + 1;
