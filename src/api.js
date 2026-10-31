@@ -76,6 +76,7 @@ const PUBLIC_SETTINGS = [
   "order_local_currency",
   "skip_blocked",
   "draft_zero_inventory",
+  "publish_synced",
 ];
 
 export async function middlewareApi(request, env, pathname) {

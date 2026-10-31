@@ -18,9 +18,9 @@ The admin page (`public/index.html`, Arabic, RTL) has five tabs, the same tools 
    over OData: publish it in Web Services; the name is in Settings, default `ShippingAgents`).
 4. **مزامنة الأصناف (Item sync)**, with two sub-tabs. **الفئات (Categories)** pulls BC's item categories
    into Medusa alone (create, rename, never duplicate). **المنتجات (Products)** is the full sync: categories, non-blocked items with variants and unit price, and
-   active sales price lists, BC → Medusa. New products are drafts; a clashing SKU is skipped. **Every
+   active sales price lists, BC → Medusa. Synced items are published (option, default on; blocked or zero-stock items stay drafts); a clashing SKU is skipped. **Every
    Medusa product whose handle matches no BC item becomes a draft**, whoever created it (BC is the
-   origin). Its options sit on the Products sub-tab: blocked items not imported; zero stock in BC → draft. A third
+   origin). Its options sit on the Products sub-tab: blocked items not imported; zero stock in BC → draft; publish synced items. A third
    sub-tab, **الصور (Images)**, moves each BC item's picture to the product the sync created, through
    Medusa's file storage (S3/R2 on Medusa Cloud): first image, and thumbnail unless the admin chose
    another; images added in Medusa stay; an unchanged picture is not uploaded again; one removed in

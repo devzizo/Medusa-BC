@@ -40,6 +40,7 @@ export const SETTING_KEYS = [
   // Item sync options, "0" = off (unset = on).
   "skip_blocked",
   "draft_zero_inventory",
+  "publish_synced",
 ];
 
 const MAPPINGS = {
