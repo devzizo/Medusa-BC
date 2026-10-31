@@ -60,6 +60,7 @@ async function read({ ctx, medusa, bc, budget }) {
   // Options from Settings; unset means on.
   const importBlocked = settings.skip_blocked === "0";
   const draftZeroInventory = settings.draft_zero_inventory !== "0";
+  const publish = settings.publish_synced !== "0";
   const [bcCategories, bcItems, bcVariants] = await Promise.all([
     listBcItemCategories(bc, settings.company_id, options),
     listBcItems(bc, settings.company_id, options, { includeBlocked: importBlocked }),
@@ -84,6 +85,7 @@ async function read({ ctx, medusa, bc, budget }) {
     currency: currency.toLowerCase(),
     sales_channel_id: sales_channels?.[0]?.id ?? null,
     shipping_profile_id: shipping_profiles?.[0]?.id ?? null,
+    publish,
   };
   Object.assign(summary, {
     categories_created: 0,
@@ -91,6 +93,7 @@ async function read({ ctx, medusa, bc, budget }) {
     products_created: 0,
     products_updated: 0,
     products_skipped: 0,
+    products_published: 0,
     products_drafted_blocked: 0,
     products_drafted_zero_inventory: 0,
   });
@@ -140,7 +143,19 @@ async function categories({ ctx, medusa, budget }) {
   }
 }
 
-// ---- products: create new as draft, update ours piece by piece ----
+// ---- products: create new, update ours piece by piece ----
+
+// The status a synced item gets. Blocked or out of stock in BC (per the
+// options): a draft. Otherwise, with "publish synced items" on (the default),
+// published; with it off, a new product is a draft, a product rejected by an
+// older run goes back to draft for an admin to publish, and any other status
+// is the admin's and stays as it is (undefined = leave it).
+export const syncedStatus = (product, current, publish) => {
+  if (product.draft_reason) return "draft";
+  if (publish) return "published";
+  if (!current || current.status === "rejected") return "draft";
+  return undefined;
+};
 
 // Calls a product costs, so a step never starts one it cannot finish.
 const productCost = (product, current) => (current ? 3 + product.variants.length : 1);
@@ -175,17 +190,21 @@ async function products({ ctx, medusa, budget }) {
     try {
       if (!current) {
         const { category_handle, draft_reason, ...body } = product;
+        const status = syncedStatus(product, null, ctx.state.context.publish);
         await medusa.post("/admin/products", {
           ...body,
-          status: "draft",
+          status,
           ...(categoryId ? { categories: [{ id: categoryId }] } : {}),
           ...(ctx.state.context.sales_channel_id ? { sales_channels: [{ id: ctx.state.context.sales_channel_id }] } : {}),
           ...(ctx.state.context.shipping_profile_id ? { shipping_profile_id: ctx.state.context.shipping_profile_id } : {}),
         });
         ctx.setResult("product", row.seq, { status: "created" });
         summary.products_created++;
+        if (status === "published") summary.products_published = (summary.products_published ?? 0) + 1;
       } else {
-        await updateProduct(ctx, medusa, product, current, categoryId);
+        const status = syncedStatus(product, current, ctx.state.context.publish);
+        await updateProduct(ctx, medusa, product, current, categoryId, status);
+        if (status === "published" && current.status !== "published") summary.products_published = (summary.products_published ?? 0) + 1;
         if (product.draft_reason && current.status !== "draft") {
           summary[`products_drafted_${product.draft_reason}`]++;
           ctx.note({
@@ -259,16 +278,14 @@ async function withPrices(ctx, write, body) {
 // rebuilds the options from them and orphans the variants' values. Variants
 // matched by SKU keep their ids; new BC variants get their option value
 // linked to the product first (options are shared), then are created.
-async function updateProduct(ctx, medusa, product, current, categoryId) {
+async function updateProduct(ctx, medusa, product, current, categoryId, status) {
   await medusa.post(`/admin/products/${current.id}`, {
     title: product.title,
     subtitle: product.subtitle ?? null,
     metadata: product.metadata,
     ...(categoryId ? { categories: [{ id: categoryId }] } : {}),
-    // Blocked or out of stock in BC (per the options): a draft. Rejected by an
-    // older run: back in BC, a draft for an admin to publish. Otherwise the
-    // status is the admin's and stays as it is.
-    ...(product.draft_reason || current.status === "rejected" ? { status: "draft" } : {}),
+    // See syncedStatus: undefined leaves the admin's status as it is.
+    ...(status && status !== current.status ? { status } : {}),
   });
   const idBySku = new Map(current.variants.map((variant) => [variant.sku, variant.id]));
   for (const variant of product.variants) {

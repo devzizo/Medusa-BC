@@ -208,6 +208,8 @@
             الأصناف المحظورة (Blocked) في BC لا تُستورد <span class="notice">— وإن أُلغي الخيار تُستورد كـ draft</span></label>
           <label class="check"><input type="checkbox" id="draft_zero_inventory" data-testid="opt-draft-zero">
             الصنف الذي مخزونه في BC صفر يتحول إلى draft <span class="notice">— مجموع مخزون الصنف في كل مستودعات BC</span></label>
+          <label class="check"><input type="checkbox" id="publish_synced" data-testid="opt-publish">
+            كل صنف تتم مزامنته يصبح منشورًا (Published) <span class="notice">— إلا المحظور أو صفري المخزون حسب الخيارين أعلاه؛ وإن أُلغي الخيار تُنشأ المنتجات الجديدة draft ولا تُغيَّر حالة الموجود</span></label>
           <div class="row" style="margin-top:12px"><button id="save-options" data-testid="save-options">حفظ الخيارات</button></div>
           <div class="result" id="result-options" data-testid="result-options"></div>
         </div>
@@ -215,7 +217,7 @@
           <h2>مزامنة المنتجات</h2>
           <p class="hint">
             تستورد من الشركة المختارة: الفئات، والأصناف غير المحظورة مع المتغيرات وسعر الوحدة، وقوائم أسعار البيع النشطة.
-            المنتجات الجديدة تُنشأ مسودة (draft)، والإعادة تحدّث ولا تكرر. <strong>أي منتج في Medusa لا يطابق معرّفه (handle)
+            كل صنف يُزامَن يصبح منشورًا (Published) ما لم يُلغَ خيار النشر أعلاه، والإعادة تحدّث ولا تكرر. <strong>أي منتج في Medusa لا يطابق معرّفه (handle)
             صنفًا في BC يتحول إلى draft</strong>، أيًا كان مصدره. خيارات الأصناف المحظورة والمخزون الصفري أعلاه، واختيار قوائم الأسعار في الإعدادات.
             الصنف الذي رقمه مستعمل لمنتج آخر لا يُعدَّل ويُذكر. تعمل في الخادم خطوة خطوة، ولا تحتاج بقاء الصفحة مفتوحة.
           </p>
@@ -427,7 +429,7 @@
         for (const key of FIELDS) $(key).value = saved[key] ?? "";
         showSavedCompanyOption();
         // Unset means on; "0" is off.
-        for (const key of ["skip_blocked", "draft_zero_inventory"]) $(key).checked = saved[key] !== "0";
+        for (const key of ["skip_blocked", "draft_zero_inventory", "publish_synced"]) $(key).checked = saved[key] !== "0";
         $("price_list_service").placeholder = data.defaults.price_list_service;
         $("price_list_line_service").placeholder = data.defaults.price_list_line_service;
         $("inventory_service").placeholder = data.defaults.inventory_service;
@@ -538,6 +540,7 @@
         saved = (await api("settings", {
           skip_blocked: $("skip_blocked").checked ? "1" : "0",
           draft_zero_inventory: $("draft_zero_inventory").checked ? "1" : "0",
+          publish_synced: $("publish_synced").checked ? "1" : "0",
         })).saved;
         show($("result-options"), true, "حُفظت الخيارات. تُطبَّق في المزامنة القادمة.");
       } catch (error) {
@@ -611,7 +614,7 @@
         summary: [
           ["bc_categories", "فئات في BC"], ["categories_created", "فئات أُنشئت"], ["categories_updated", "فئات تغيّر اسمها"],
           ["bc_items", "أصناف في BC (غير محظورة)"], ["bc_variants", "متغيرات في BC"],
-          ["products_created", "منتجات أُنشئت (draft)"], ["products_updated", "منتجات حُدّثت"], ["products_skipped", "أصناف تُخطيت"],
+          ["products_created", "منتجات أُنشئت"], ["products_published", "منتجات أصبحت منشورة (Published)"], ["products_updated", "منتجات حُدّثت"], ["products_skipped", "أصناف تُخطيت"],
           ["products_drafted", "منتجات تحولت إلى draft (handle غير موجود في BC)"],
           ["products_drafted_blocked", "تحولت إلى draft (محظورة في BC)"],
           ["products_drafted_zero_inventory", "تحولت إلى draft (مخزونها في BC صفر)"],
