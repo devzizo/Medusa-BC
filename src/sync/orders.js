@@ -1,6 +1,6 @@
 import { bcCompanyPath, bcCredentials, bcGet, bcSend, listBcLocations } from "../lib/bc.js";
 import { medusaClient } from "../lib/medusa.js";
-import { externalNumber, mapOrderHeader, mapOrderLines } from "../lib/orders.js";
+import { externalNumber, mapOrderHeader, mapOrderLines, metadataChanged, orderMetadata, summarizeBcOrder } from "../lib/orders.js";
 
 // Posting one Medusa order to BC as a sales order, by hand from the Orders
 // tab (never automatically). The order is looked up in BC first by its
@@ -10,7 +10,7 @@ import { externalNumber, mapOrderHeader, mapOrderLines } from "../lib/orders.js"
 // so a retry starts clean.
 
 export const ORDER_FIELDS = [
-  "id", "display_id", "created_at", "email", "currency_code", "total", "status", "payment_status", "fulfillment_status",
+  "id", "metadata", "display_id", "created_at", "email", "currency_code", "total", "status", "payment_status", "fulfillment_status",
   "customer.id", "customer.first_name", "customer.last_name", "customer.company_name", "customer.metadata",
   "shipping_address.*",
   "items.id", "items.title", "items.quantity", "items.unit_price", "items.is_tax_inclusive", "items.discount_total", "items.discount_subtotal",
@@ -57,16 +57,14 @@ export async function postOrder(env, db, orderId) {
     const existing = await findInBc(bc, companyId, number);
     if (existing) {
       // Already there (an earlier click whose answer was lost, or keyed in BC): link it, never duplicate.
-      return {
-        record: await db.finishOrder(order.id, {
-          status: "synced",
-          bc_order_id: existing.id,
-          bc_order_number: existing.kind === "invoice" ? `${existing.number} (invoice)` : existing.number,
-          bc_total: existing.totalAmountIncludingTax,
-          medusa_total: order.total,
-        }),
-        linked: true,
-      };
+      await db.finishOrder(order.id, {
+        status: "synced",
+        bc_order_id: existing.id,
+        bc_order_number: existing.kind === "invoice" ? `${existing.number} (invoice)` : existing.number,
+        bc_total: existing.totalAmountIncludingTax,
+        medusa_total: order.total,
+      });
+      return { record: await refreshAfterPosting(env, db, order), linked: true };
     }
     const mapped = mapOrderHeader(order, { defaultCustomerNumber: settings.order_customer_number, localCurrency: settings.order_local_currency || "SAR" });
     if (mapped.error) throw new Error(mapped.error);
@@ -83,15 +81,15 @@ export async function postOrder(env, db, orderId) {
       await bcSend(bc, "POST", `${bcCompanyPath(companyId)}/salesOrders(${created.id})/salesOrderLines`, line);
     }
     const header = await bcGet(bc, `${bcCompanyPath(companyId)}/salesOrders(${created.id})`);
-    return {
-      record: await db.finishOrder(order.id, {
-        status: "synced",
-        bc_order_id: created.id,
-        bc_order_number: header.number,
-        bc_total: header.totalAmountIncludingTax,
-        medusa_total: order.total,
-      }),
-    };
+    await db.finishOrder(order.id, {
+      status: "synced",
+      bc_order_id: created.id,
+      bc_order_number: header.number,
+      bc_total: header.totalAmountIncludingTax,
+      medusa_total: order.total,
+    });
+    created = null;
+    return { record: await refreshAfterPosting(env, db, order) };
   } catch (error) {
     let message = error?.message || String(error);
     if (created?.id) {
@@ -102,4 +100,51 @@ export async function postOrder(env, db, orderId) {
     }
     return { record: await db.finishOrder(order.id, { status: "failed", medusa_total: order.total, error: message }) };
   }
+}
+
+/**
+ * Right after posting, the Medusa order page gets the BC number and status.
+ * A failure here never undoes the posting: the record stays "synced" and
+ * the next check (button or schedule) writes it.
+ */
+const refreshAfterPosting = (env, db, order) =>
+  refreshOrder(env, db, order.id, { order }).catch(async (error) => ({
+    ...(await db.orderRecord(order.id)),
+    warning: `Posted to BC, but the Medusa order page was not updated yet: ${error?.message || error}`,
+  }));
+
+/** BC's sales order (while it exists), shipments and invoices for MED-<n>. */
+async function readBcOrder(bc, companyId, number) {
+  const filter = encodeURIComponent(`externalDocumentNumber eq ${quote(number)}`);
+  const list = async (collection) => (await bcGet(bc, `${bcCompanyPath(companyId)}/${collection}?$filter=${filter}`)).value ?? [];
+  const [orders, shipments, invoices] = await Promise.all([list("salesOrders"), list("salesShipments"), list("salesInvoices")]);
+  return { order: orders[0] ?? null, shipments, invoices };
+}
+
+/**
+ * Reads what BC now says about a posted order and writes it on the Medusa
+ * order (metadata, shown on its page) when it changed. Never touches
+ * Medusa's own order, payment or fulfilment status.
+ */
+export async function refreshOrder(env, db, orderId, { order } = {}) {
+  const record = await db.orderRecord(orderId);
+  if (record?.status !== "synced") return record;
+  const settings = await db.getSettings();
+  const medusa = medusaClient(env);
+  const current = order ?? (await medusa.get(`/admin/orders/${encodeURIComponent(orderId)}`, { fields: "id,display_id,metadata" })).order;
+  const summary = summarizeBcOrder(await readBcOrder(bcCredentials(env), settings.company_id, externalNumber(current)));
+  const metadata = orderMetadata(summary, { salesOrderNumber: record.bc_order_number, postedAt: record.at, checkedAt: new Date().toISOString() });
+  if (metadataChanged(current.metadata, metadata)) {
+    await medusa.post(`/admin/orders/${encodeURIComponent(orderId)}`, { metadata: { ...(current.metadata ?? {}), ...metadata } });
+  }
+  return db.saveBcState(orderId, summary);
+}
+
+/** The scheduled check: the posted orders BC may still change, a few per run. */
+export async function refreshDueOrders(env, db, limit) {
+  const results = [];
+  for (const orderId of await db.dueOrders(limit)) {
+    results.push(await refreshOrder(env, db, orderId).catch((error) => ({ order_id: orderId, error: error?.message || String(error) })));
+  }
+  return results;
 }

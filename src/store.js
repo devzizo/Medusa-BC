@@ -1,5 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 import { runCustomerSyncStep } from "./sync/customers.js";
+import { refreshDueOrders } from "./sync/orders.js";
 import { runImageSyncStep } from "./sync/images.js";
 import { runInventorySyncStep } from "./sync/inventory.js";
 import { runCategorySyncStep, runItemSyncStep } from "./sync/items.js";
@@ -29,6 +30,8 @@ export const SETTING_KEYS = [
   "price_list_line_service",
   "inventory_service",
   "shipping_agent_service",
+  "item_reference_service",
+  "item_card_service",
   // Order posting (Orders tab): default BC customer, shipping line, default location, BC's local currency.
   "order_customer_number",
   "order_shipping_type",
@@ -41,6 +44,7 @@ export const SETTING_KEYS = [
   "skip_blocked",
   "draft_zero_inventory",
   "publish_synced",
+  "changed_only",
 ];
 
 const MAPPINGS = {
@@ -69,6 +73,14 @@ export class MiddlewareStore extends DurableObject {
       CREATE TABLE IF NOT EXISTS work (run_id TEXT NOT NULL, kind TEXT NOT NULL, seq INTEGER NOT NULL,
         key TEXT NOT NULL, payload TEXT NOT NULL, result TEXT, PRIMARY KEY (run_id, kind, seq));
     `);
+    // Columns added after order_sync first shipped: what BC said at the last check.
+    for (const column of ["bc_status TEXT", "bc_detail TEXT", "checked_at TEXT", "done INTEGER DEFAULT 0"]) {
+      try {
+        this.sql.exec(`ALTER TABLE order_sync ADD COLUMN ${column}`);
+      } catch {
+        // already there
+      }
+    }
   }
 
   rows(query, ...bindings) {
@@ -164,6 +176,35 @@ export class MiddlewareStore extends DurableObject {
     return this.rows("SELECT * FROM order_sync WHERE order_id = ?", orderId)[0];
   }
 
+  orderRecord(orderId) {
+    return this.rows("SELECT * FROM order_sync WHERE order_id = ?", orderId)[0] ?? null;
+  }
+
+  /** What BC said at the last check, kept with the order's record. */
+  saveBcState(orderId, summary) {
+    this.sql.exec(
+      "UPDATE order_sync SET bc_status = ?, bc_detail = ?, checked_at = ?, done = ? WHERE order_id = ?",
+      summary.status,
+      JSON.stringify({ sales_order: summary.sales_order, shipments: summary.shipments, invoices: summary.invoices, total: summary.total }),
+      new Date().toISOString(),
+      summary.done ? 1 : 0,
+      orderId,
+    );
+    return this.orderRecord(orderId);
+  }
+
+  /** Posted orders BC may still change, least recently checked first. */
+  dueOrders(limit) {
+    return this.rows("SELECT order_id FROM order_sync WHERE status = 'synced' AND done = 0 ORDER BY checked_at IS NOT NULL, checked_at LIMIT ?", limit).map(
+      (row) => row.order_id,
+    );
+  }
+
+  /** The cron's check: a few orders per run, so each run stays under the call budget. */
+  async refreshDueOrders() {
+    return refreshDueOrders(this.env, this, 6);
+  }
+
   // ---- Runs ----
 
   view(row) {
@@ -248,6 +289,9 @@ export class MiddlewareStore extends DurableObject {
       save,
       settings: this.getSettings(),
       mappings: (kind) => this.getMappings(kind, this.getSettings().company_id),
+      // When the last run of a kind that succeeded started, or null.
+      lastSucceeded: (kind) =>
+        this.rows("SELECT started_at FROM run WHERE kind = ? AND status = 'succeeded' AND id <> ? ORDER BY started_at DESC LIMIT 1", kind, id)[0]?.started_at ?? null,
       // `from` lets a stage append page after page to the same list.
       putWork: (kind, items, from = 0) => {
         items.forEach((item, i) =>

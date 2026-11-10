@@ -1,6 +1,6 @@
 import { bcCredentials, listBcItemCategories, listBcItems, listBcItemVariants, listBcODataRows } from "../lib/bc.js";
 import { makeBudget, medusaClient } from "../lib/medusa.js";
-import { mapCategories, mapItems, mapPriceLists } from "../lib/map.js";
+import { barcodeIndex, hsCodeIndex, mapCategories, mapItems, mapPriceLists } from "../lib/map.js";
 import { CATEGORY_PLACEMENT, placementParents, placementPatch } from "../lib/category-placement.js";
 import { textHash } from "../lib/text.js";
 
@@ -63,6 +63,8 @@ async function read({ ctx, medusa, bc, budget }) {
   const importBlocked = settings.skip_blocked === "0";
   const draftZeroInventory = settings.draft_zero_inventory !== "0";
   const publish = settings.publish_synced !== "0";
+  // "Only items changed in BC" (default on): since the start of the last item sync that succeeded.
+  const changedSince = settings.changed_only !== "0" ? ctx.lastSucceeded("items") : null;
   const [bcCategories, bcItems, bcVariants] = await Promise.all([
     listBcItemCategories(bc, settings.company_id, options),
     listBcItems(bc, settings.company_id, options, { includeBlocked: importBlocked }),
@@ -79,7 +81,8 @@ async function read({ ctx, medusa, bc, budget }) {
   const { sales_channels } = await medusa.get("/admin/sales-channels", { limit: 1, fields: "id" });
   const { shipping_profiles } = await medusa.get("/admin/shipping-profiles", { type: "default", limit: 1, fields: "id" });
 
-  const mapped = mapItems(bcItems, bcVariants, currency.toLowerCase(), { draftZeroInventory });
+  const extras = await readBarcodesAndHsCodes(ctx, bc, bcItems, options);
+  const mapped = mapItems(bcItems, bcVariants, currency.toLowerCase(), { draftZeroInventory, ...extras });
   mapped.issues.forEach(ctx.note);
   ctx.putWork("category", mapCategories(bcCategories).map((category) => ({ key: category.handle, payload: category })));
   ctx.putWork("product", mapped.products.map((product) => ({ key: product.handle, payload: product })));
@@ -88,6 +91,7 @@ async function read({ ctx, medusa, bc, budget }) {
     sales_channel_id: sales_channels?.[0]?.id ?? null,
     shipping_profile_id: shipping_profiles?.[0]?.id ?? null,
     publish,
+    changed_since: changedSince,
   };
   Object.assign(summary, {
     categories_created: 0,
@@ -95,6 +99,7 @@ async function read({ ctx, medusa, bc, budget }) {
     products_created: 0,
     products_updated: 0,
     products_skipped: 0,
+    products_unchanged: 0,
     products_published: 0,
     descriptions_written: 0,
     descriptions_kept: 0,
@@ -102,6 +107,52 @@ async function read({ ctx, medusa, bc, budget }) {
     products_drafted_zero_inventory: 0,
   });
   next(state, "categories");
+}
+
+export const DEFAULT_ITEM_REFERENCE_SERVICE = "ItemReferences";
+export const DEFAULT_ITEM_CARD_SERVICE = "ItemCard";
+
+/**
+ * Only the columns a published page really has: naming one it lacks is a 400
+ * (rule 4). Null when a column it cannot do without is missing.
+ */
+async function readColumns(ctx, bc, service, needed, optional, options) {
+  const { settings } = ctx;
+  const [sample] = await listBcODataRows(bc, settings.company_name, service, "$top=1", options).catch((error) => {
+    throw new Error(`${error.message} (web service "${service}")`);
+  });
+  if (!sample) return [];
+  const missing = needed.filter((column) => !(column in sample));
+  if (missing.length) throw new Error(`web service "${service}" has no ${missing.join(", ")} column`);
+  const select = [...needed, ...optional.filter((column) => column in sample)].join(",");
+  return listBcODataRows(bc, settings.company_name, service, `$select=${select}`, options);
+}
+
+/**
+ * Barcodes (Item References, page 5737) and HS codes (Item Card, page 30):
+ * neither is in API v2.0. A page that is not published is noted and the sync
+ * goes on: barcodes then come from the item's GTIN, and HS codes stay as they are.
+ */
+async function readBarcodesAndHsCodes(ctx, bc, items, options) {
+  const { settings, summary } = ctx;
+  const extras = {};
+  const baseUnits = new Map(items.map((item) => [item.number, item.baseUnitOfMeasureCode ?? ""]));
+  try {
+    const rows = await readColumns(ctx, bc, settings.item_reference_service || DEFAULT_ITEM_REFERENCE_SERVICE,
+      ["Item_No", "Reference_Type", "Reference_No"], ["Variant_Code", "Unit_of_Measure", "Discontinue_Bar_Code"], options);
+    extras.barcodes = barcodeIndex(rows, baseUnits);
+    summary.bc_barcodes = extras.barcodes.size;
+  } catch (error) {
+    ctx.note({ kind: "barcode_source", ref: "Item References", message: `Barcodes not read: ${error.message}. Is page 5737 Item Reference Entries published under that name? Items without variants use their GTIN.` });
+  }
+  try {
+    const rows = await readColumns(ctx, bc, settings.item_card_service || DEFAULT_ITEM_CARD_SERVICE, ["No", "Tariff_No"], [], options);
+    extras.hsCodes = hsCodeIndex(rows);
+    summary.bc_hs_codes = extras.hsCodes.size;
+  } catch (error) {
+    ctx.note({ kind: "hs_code_source", ref: "Item Card", message: `HS codes not read: ${error.message}. Is page 30 Item Card published under that name? HS codes stay as they are.` });
+  }
+  return extras;
 }
 
 // The category sync's read: BC's categories only.
@@ -181,6 +232,24 @@ export const syncedStatus = (product, current, publish) => {
   return undefined;
 };
 
+/**
+ * With "only items changed in BC" on, a product is left alone when nothing
+ * would move: BC last modified the item before `since` (the start of the last
+ * item sync that succeeded), Medusa has every variant BC has, and its status
+ * is already what the sync would set. A status that would change (blocked,
+ * out of stock, to be published) or a new BC variant still updates it, as
+ * does any item with no modified time. Without `since` (first run, or the
+ * option off) everything is written.
+ */
+export const unchangedSince = (product, current, since, status) => {
+  if (!since || !current) return false;
+  const modified = Date.parse(product.metadata?.bc_last_modified ?? "");
+  if (!Number.isFinite(modified) || modified >= Date.parse(since)) return false;
+  const skus = new Set(current.variants.map((variant) => variant.sku));
+  if (product.variants.some((variant) => !skus.has(variant.sku))) return false;
+  return !status || status === current.status;
+};
+
 // Calls a product costs, so a step never starts one it cannot finish.
 const productCost = (product, current) => (current ? 3 + product.variants.length : 1);
 
@@ -244,6 +313,10 @@ async function products({ ctx, medusa, budget }) {
         ctx.setResult("product", row.seq, { status: "created" });
         summary.products_created++;
         if (status === "published") summary.products_published = (summary.products_published ?? 0) + 1;
+      } else if (unchangedSince(product, current, ctx.state.context.changed_since, syncedStatus(product, current, ctx.state.context.publish))) {
+        // Still ours: its prices stay in the price lists.
+        ctx.setResult("product", row.seq, { status: "unchanged" });
+        summary.products_unchanged++;
       } else {
         const status = syncedStatus(product, current, ctx.state.context.publish);
         await updateProduct(ctx, medusa, product, current, categoryId, status);
@@ -328,6 +401,7 @@ export async function updateProduct(ctx, medusa, product, current, categoryId, s
   await medusa.post(`/admin/products/${current.id}`, {
     title: product.title,
     subtitle: product.subtitle ?? null,
+    ...(product.hs_code ? { hs_code: product.hs_code } : {}),
     metadata: text.metadata,
     ...(text.description !== undefined ? { description: text.description } : {}),
     ...(categoryId ? { categories: [{ id: categoryId }] } : {}),
@@ -341,6 +415,7 @@ export async function updateProduct(ctx, medusa, product, current, categoryId, s
     await withPrices(ctx, (body) => medusa.post(`/admin/products/${current.id}/variants/${id}`, body), {
       title: variant.title,
       ...(variant.barcode ? { barcode: variant.barcode } : {}),
+      ...(variant.hs_code ? { hs_code: variant.hs_code } : {}),
       metadata: variant.metadata,
       prices: variant.prices,
     });
@@ -429,7 +504,7 @@ export const selectedPriceLists = (settings) => {
 };
 
 const ownedProducts = (ctx) =>
-  ctx.work("product").filter((row) => row.result && ["created", "updated", "update_failed"].includes(row.result.status));
+  ctx.work("product").filter((row) => row.result && ["created", "updated", "unchanged", "update_failed"].includes(row.result.status));
 
 async function priceListsRead({ ctx, bc, budget }) {
   const { state, summary, settings } = ctx;

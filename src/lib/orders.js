@@ -98,3 +98,42 @@ export const mapOrderLines = (order, { pricesIncludeTax, locationId, shipping })
   if (!lines.length && !problems.length) problems.push("The order has no lines.");
   return { lines, problems };
 };
+
+/**
+ * What BC says about a posted order now: the open sales order (if still
+ * there), its posted shipments and invoices. Once BC has invoiced the whole
+ * order it deletes the sales order, so "gone with invoices" means invoiced.
+ * Done when nothing more can change: invoiced and every invoice paid.
+ */
+export const summarizeBcOrder = ({ order, shipments = [], invoices = [] }) => {
+  const status = order
+    ? `${order.status}${order.fullyShipped ? " · fully shipped" : shipments.length ? " · partly shipped" : ""}`
+    : invoices.length
+      ? "Invoiced"
+      : "Not in BC (deleted?)";
+  return {
+    status,
+    sales_order: order?.number ?? null,
+    shipments: shipments.map((s) => s.number).join(", "),
+    invoices: invoices.map((i) => `${i.number} (${i.status})`).join(", "),
+    total: order?.totalAmountIncludingTax ?? invoices.reduce((sum, i) => sum + Number(i.totalAmountIncludingTax || 0), 0),
+    done: !order && invoices.length > 0 && invoices.every((i) => i.status === "Paid"),
+  };
+};
+
+/**
+ * The keys written on the Medusa order (shown in its Metadata on the order
+ * page). Flat strings, so the admin shows them as they are.
+ */
+export const orderMetadata = (summary, { salesOrderNumber, postedAt, checkedAt }) => ({
+  bc_sales_order: summary.sales_order || salesOrderNumber || "",
+  bc_status: summary.status,
+  bc_shipments: summary.shipments,
+  bc_invoices: summary.invoices,
+  bc_posted_at: postedAt || "",
+  bc_updated_at: checkedAt,
+});
+
+/** Whether the order's BC keys would change (the check time aside). */
+export const metadataChanged = (current = {}, next) =>
+  Object.entries(next).some(([key, value]) => key !== "bc_updated_at" && (current?.[key] ?? "") !== value);

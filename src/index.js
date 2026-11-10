@@ -16,4 +16,10 @@ export default {
     }
     return env.ASSETS.fetch(request);
   },
+
+  // Every 15 minutes: what BC did with the posted orders (released, shipped,
+  // invoiced, paid) is written on the Medusa orders, a few per run.
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(env.STORE.get(env.STORE.idFromName("main")).refreshDueOrders());
+  },
 };
