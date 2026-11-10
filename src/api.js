@@ -80,6 +80,7 @@ const PUBLIC_SETTINGS = [
   "skip_blocked",
   "draft_zero_inventory",
   "publish_synced",
+  "changed_only",
 ];
 
 export async function middlewareApi(request, env, pathname) {

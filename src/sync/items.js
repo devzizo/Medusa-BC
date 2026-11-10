@@ -63,6 +63,8 @@ async function read({ ctx, medusa, bc, budget }) {
   const importBlocked = settings.skip_blocked === "0";
   const draftZeroInventory = settings.draft_zero_inventory !== "0";
   const publish = settings.publish_synced !== "0";
+  // "Only items changed in BC" (default on): since the start of the last item sync that succeeded.
+  const changedSince = settings.changed_only !== "0" ? ctx.lastSucceeded("items") : null;
   const [bcCategories, bcItems, bcVariants] = await Promise.all([
     listBcItemCategories(bc, settings.company_id, options),
     listBcItems(bc, settings.company_id, options, { includeBlocked: importBlocked }),
@@ -89,6 +91,7 @@ async function read({ ctx, medusa, bc, budget }) {
     sales_channel_id: sales_channels?.[0]?.id ?? null,
     shipping_profile_id: shipping_profiles?.[0]?.id ?? null,
     publish,
+    changed_since: changedSince,
   };
   Object.assign(summary, {
     categories_created: 0,
@@ -96,6 +99,7 @@ async function read({ ctx, medusa, bc, budget }) {
     products_created: 0,
     products_updated: 0,
     products_skipped: 0,
+    products_unchanged: 0,
     products_published: 0,
     descriptions_written: 0,
     descriptions_kept: 0,
@@ -228,6 +232,24 @@ export const syncedStatus = (product, current, publish) => {
   return undefined;
 };
 
+/**
+ * With "only items changed in BC" on, a product is left alone when nothing
+ * would move: BC last modified the item before `since` (the start of the last
+ * item sync that succeeded), Medusa has every variant BC has, and its status
+ * is already what the sync would set. A status that would change (blocked,
+ * out of stock, to be published) or a new BC variant still updates it, as
+ * does any item with no modified time. Without `since` (first run, or the
+ * option off) everything is written.
+ */
+export const unchangedSince = (product, current, since, status) => {
+  if (!since || !current) return false;
+  const modified = Date.parse(product.metadata?.bc_last_modified ?? "");
+  if (!Number.isFinite(modified) || modified >= Date.parse(since)) return false;
+  const skus = new Set(current.variants.map((variant) => variant.sku));
+  if (product.variants.some((variant) => !skus.has(variant.sku))) return false;
+  return !status || status === current.status;
+};
+
 // Calls a product costs, so a step never starts one it cannot finish.
 const productCost = (product, current) => (current ? 3 + product.variants.length : 1);
 
@@ -291,6 +313,10 @@ async function products({ ctx, medusa, budget }) {
         ctx.setResult("product", row.seq, { status: "created" });
         summary.products_created++;
         if (status === "published") summary.products_published = (summary.products_published ?? 0) + 1;
+      } else if (unchangedSince(product, current, ctx.state.context.changed_since, syncedStatus(product, current, ctx.state.context.publish))) {
+        // Still ours: its prices stay in the price lists.
+        ctx.setResult("product", row.seq, { status: "unchanged" });
+        summary.products_unchanged++;
       } else {
         const status = syncedStatus(product, current, ctx.state.context.publish);
         await updateProduct(ctx, medusa, product, current, categoryId, status);
@@ -478,7 +504,7 @@ export const selectedPriceLists = (settings) => {
 };
 
 const ownedProducts = (ctx) =>
-  ctx.work("product").filter((row) => row.result && ["created", "updated", "update_failed"].includes(row.result.status));
+  ctx.work("product").filter((row) => row.result && ["created", "updated", "unchanged", "update_failed"].includes(row.result.status));
 
 async function priceListsRead({ ctx, bc, budget }) {
   const { state, summary, settings } = ctx;

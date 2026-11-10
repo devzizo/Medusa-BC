@@ -73,6 +73,9 @@ It replaces the in-Medusa plugin `@hoven/medusa-bc` (repo `devzizo/essentials-st
 16. **BC's later changes reach Medusa as order metadata only** (`bc_*` keys), by button and a 15-minute
     cron; never Medusa's order, payment or fulfilment status. The status write after posting must
     never undo the posting.
+17. **"Only changed items" is on by default**: skip writing an item BC did not modify since the start of the last
+    successful item sync, but never skip a new product, a new variant or a status change, and keep a skipped
+    product in the price lists (`unchanged` counts as owned). Always read the full item list.
 
 ## How to verify (before any deploy)
 

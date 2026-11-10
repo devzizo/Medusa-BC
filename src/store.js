@@ -44,6 +44,7 @@ export const SETTING_KEYS = [
   "skip_blocked",
   "draft_zero_inventory",
   "publish_synced",
+  "changed_only",
 ];
 
 const MAPPINGS = {
@@ -288,6 +289,9 @@ export class MiddlewareStore extends DurableObject {
       save,
       settings: this.getSettings(),
       mappings: (kind) => this.getMappings(kind, this.getSettings().company_id),
+      // When the last run of a kind that succeeded started, or null.
+      lastSucceeded: (kind) =>
+        this.rows("SELECT started_at FROM run WHERE kind = ? AND status = 'succeeded' AND id <> ? ORDER BY started_at DESC LIMIT 1", kind, id)[0]?.started_at ?? null,
       // `from` lets a stage append page after page to the same list.
       putWork: (kind, items, from = 0) => {
         items.forEach((item, i) =>

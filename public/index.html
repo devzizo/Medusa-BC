@@ -212,6 +212,8 @@
             الصنف الذي مخزونه في BC صفر يتحول إلى draft <span class="notice">— مجموع مخزون الصنف في كل مستودعات BC</span></label>
           <label class="check"><input type="checkbox" id="publish_synced" data-testid="opt-publish">
             كل صنف تتم مزامنته يصبح منشورًا (Published) <span class="notice">— إلا المحظور أو صفري المخزون حسب الخيارين أعلاه؛ وإن أُلغي الخيار تُنشأ المنتجات الجديدة draft ولا تُغيَّر حالة الموجود</span></label>
+          <label class="check"><input type="checkbox" id="changed_only" data-testid="opt-changed-only">
+            مزامنة الأصناف التي عُدّلت فقط <span class="notice">— يُحدَّث فقط ما عُدّل في BC بعد آخر مزامنة ناجحة (<bdi data-testid="changed-since"></bdi>)؛ وما يحتاج تغيير حالته أو له متغير جديد يُحدَّث دائمًا. وإن أُلغي الخيار تُحدَّث كل الأصناف</span></label>
           <div class="row" style="margin-top:12px"><button id="save-options" data-testid="save-options">حفظ الخيارات</button></div>
           <div class="result" id="result-options" data-testid="result-options"></div>
         </div>
@@ -432,7 +434,7 @@
         for (const key of FIELDS) $(key).value = saved[key] ?? "";
         showSavedCompanyOption();
         // Unset means on; "0" is off.
-        for (const key of ["skip_blocked", "draft_zero_inventory", "publish_synced"]) $(key).checked = saved[key] !== "0";
+        for (const key of ["skip_blocked", "draft_zero_inventory", "publish_synced", "changed_only"]) $(key).checked = saved[key] !== "0";
         $("price_list_service").placeholder = data.defaults.price_list_service;
         $("price_list_line_service").placeholder = data.defaults.price_list_line_service;
         $("inventory_service").placeholder = data.defaults.inventory_service;
@@ -546,6 +548,7 @@
           skip_blocked: $("skip_blocked").checked ? "1" : "0",
           draft_zero_inventory: $("draft_zero_inventory").checked ? "1" : "0",
           publish_synced: $("publish_synced").checked ? "1" : "0",
+          changed_only: $("changed_only").checked ? "1" : "0",
         })).saved;
         show($("result-options"), true, "حُفظت الخيارات. تُطبَّق في المزامنة القادمة.");
       } catch (error) {
@@ -620,7 +623,7 @@
           ["bc_categories", "فئات في BC"], ["categories_created", "فئات أُنشئت"], ["categories_updated", "فئات تغيّر اسمها"],
           ["bc_items", "أصناف في BC (غير محظورة)"], ["bc_variants", "متغيرات في BC"],
           ["bc_barcodes", "باركود من Item References"], ["bc_hs_codes", "HS code من بطاقة الصنف"],
-          ["products_created", "منتجات أُنشئت"], ["products_published", "منتجات أصبحت منشورة (Published)"], ["products_updated", "منتجات حُدّثت"], ["products_skipped", "أصناف تُخطيت"],
+          ["products_created", "منتجات أُنشئت"], ["products_published", "منتجات أصبحت منشورة (Published)"], ["products_updated", "منتجات حُدّثت"], ["products_unchanged", "أصناف لم تتغير في BC (لم تُحدَّث)"], ["products_skipped", "أصناف تُخطيت"],
           ["descriptions_written", "أوصاف كُتبت من Marketing Text في BC"], ["descriptions_kept", "أوصاف تُركت كما هي (عدّلها الفريق في Medusa)"],
           ["products_drafted", "منتجات تحولت إلى draft (handle غير موجود في BC)"],
           ["products_drafted_blocked", "تحولت إلى draft (محظورة في BC)"],
@@ -688,6 +691,11 @@
       const counter = document.querySelector(`[data-counter="${kind}"]`);
       const last = runs.find((r) => r.finished_at);
       counter.innerHTML = `عدد المزامنات: <strong data-testid="count-${kind}">${total}</strong>${last ? ` — آخر مزامنة انتهت: <bdi>${escape(when(last.finished_at))}</bdi>` : ""}`;
+      if (kind === "items") {
+        // The point "only changed items" counts from: the start of the last run that succeeded.
+        const ok = runs.find((r) => r.status === "succeeded");
+        document.querySelector('[data-testid="changed-since"]').textContent = ok ? `منذ ${when(ok.started_at)}` : "لا توجد مزامنة ناجحة بعد: الأولى تحدّث كل الأصناف";
+      }
       if (!runs.length) { box.innerHTML = `<p class="notice">لا يوجد تشغيل بعد.</p>`; return; }
       const { summary: labels, stages } = SYNCS[kind];
       box.innerHTML = runs.map((run, index) => {
