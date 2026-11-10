@@ -1,6 +1,8 @@
 import { bcCredentials, listBcItemCategories, listBcItems, listBcItemVariants, listBcODataRows } from "../lib/bc.js";
 import { makeBudget, medusaClient } from "../lib/medusa.js";
 import { barcodeIndex, hsCodeIndex, mapCategories, mapItems, mapPriceLists } from "../lib/map.js";
+import { CATEGORY_PLACEMENT, placementParents, placementPatch } from "../lib/category-placement.js";
+import { textHash } from "../lib/text.js";
 
 // The item sync, BC → Medusa: categories, items that are not blocked (with
 // their variants and unit price), and active sales price lists, the same
@@ -15,7 +17,7 @@ import { barcodeIndex, hsCodeIndex, mapCategories, mapItems, mapPriceLists } fro
 
 const BUDGET = 40;
 const PRODUCT_FIELDS =
-  "id,handle,status,variants.id,variants.sku,options.id,options.title,options.values.id,options.values.value";
+  "id,handle,status,description,metadata,variants.id,variants.sku,options.id,options.title,options.values.id,options.values.value";
 
 export const DEFAULT_PRICE_LIST_SERVICE = "SalesPriceLists";
 export const DEFAULT_PRICE_LIST_LINE_SERVICE = "PriceListLines";
@@ -60,6 +62,7 @@ async function read({ ctx, medusa, bc, budget }) {
   // Options from Settings; unset means on.
   const importBlocked = settings.skip_blocked === "0";
   const draftZeroInventory = settings.draft_zero_inventory !== "0";
+  const publish = settings.publish_synced !== "0";
   const [bcCategories, bcItems, bcVariants] = await Promise.all([
     listBcItemCategories(bc, settings.company_id, options),
     listBcItems(bc, settings.company_id, options, { includeBlocked: importBlocked }),
@@ -85,6 +88,7 @@ async function read({ ctx, medusa, bc, budget }) {
     currency: currency.toLowerCase(),
     sales_channel_id: sales_channels?.[0]?.id ?? null,
     shipping_profile_id: shipping_profiles?.[0]?.id ?? null,
+    publish,
   };
   Object.assign(summary, {
     categories_created: 0,
@@ -92,6 +96,9 @@ async function read({ ctx, medusa, bc, budget }) {
     products_created: 0,
     products_updated: 0,
     products_skipped: 0,
+    products_published: 0,
+    descriptions_written: 0,
+    descriptions_kept: 0,
     products_drafted_blocked: 0,
     products_drafted_zero_inventory: 0,
   });
@@ -158,39 +165,90 @@ async function readCategories({ ctx, bc, budget }) {
 
 // ---- categories: upsert by handle ----
 
+const noteMissingParent = (ctx, handle, parentHandle) =>
+  ctx.note({ kind: "category", ref: handle, message: `Parent category "${parentHandle}" does not exist in Medusa; left where it is.` });
+
 async function categories({ ctx, medusa, budget }) {
   const { state, summary } = ctx;
   const rows = ctx.work("category", state.cursor, 25);
   if (!rows.length) return next(state, state.afterCategories ?? "products");
+  // The placements' parents are read in the same call as the categories, so nesting costs no extra request.
+  const wanted = [...rows.map((row) => row.key), ...placementParents(rows.map((row) => row.key))];
   const { product_categories: existing } = await medusa.get("/admin/product-categories", {
-    handle: rows.map((row) => row.key),
-    fields: "id,handle,name",
-    limit: rows.length,
+    handle: wanted,
+    fields: "id,handle,name,parent_category_id,is_active",
+    limit: wanted.length,
   });
   const byHandle = new Map(existing.map((category) => [category.handle, category]));
   for (const row of rows) {
-    if (budget.left() < 2) return;
+    if (budget.left() < 3) return;
     const current = byHandle.get(row.key);
     const category = row.payload;
+    const placement = CATEGORY_PLACEMENT[row.key];
+    const parent = placement?.parent ? byHandle.get(placement.parent) : undefined;
     if (!current) {
-      const { product_category } = await medusa.post("/admin/product-categories", { ...category, is_active: true, is_internal: false });
+      const { product_category } = await medusa.post("/admin/product-categories", {
+        ...category,
+        is_active: placement?.active !== false,
+        is_internal: false,
+        ...(parent ? { parent_category_id: parent.id } : {}),
+      });
       ctx.setResult("category", row.seq, { id: product_category.id });
       summary.categories_created++;
+      if (placement?.parent && !parent) noteMissingParent(ctx, row.key, placement.parent);
     } else {
       if (current.name !== category.name) {
         await medusa.post(`/admin/product-categories/${current.id}`, { name: category.name, metadata: category.metadata });
         summary.categories_updated++;
       }
+      // Where the team put it in the tree; only categories with a placement are touched.
+      const { patch, missingParent } = placementPatch(row.key, current, parent);
+      if (patch) {
+        await medusa.post(`/admin/product-categories/${current.id}`, patch);
+        summary.categories_placed = (summary.categories_placed ?? 0) + 1;
+      }
+      if (missingParent) noteMissingParent(ctx, row.key, missingParent);
       ctx.setResult("category", row.seq, { id: current.id });
     }
     state.cursor = row.seq + 1;
   }
 }
 
-// ---- products: create new as draft, update ours piece by piece ----
+// ---- products: create new, update ours piece by piece ----
+
+// The status a synced item gets. Blocked or out of stock in BC (per the
+// options): a draft. Otherwise, with "publish synced items" on (the default),
+// published; with it off, a new product is a draft, a product rejected by an
+// older run goes back to draft for an admin to publish, and any other status
+// is the admin's and stays as it is (undefined = leave it).
+export const syncedStatus = (product, current, publish) => {
+  if (product.draft_reason) return "draft";
+  if (publish) return "published";
+  if (!current || current.status === "rejected") return "draft";
+  return undefined;
+};
 
 // Calls a product costs, so a step never starts one it cannot finish.
 const productCost = (product, current) => (current ? 3 + product.variants.length : 1);
+
+/**
+ * What a product's description and metadata become on an update, from the item's Marketing Text (product.description).
+ * BC fills the description only where it cannot undo anyone's work:
+ * - no Marketing Text in BC: nothing is written, and a description is never cleared;
+ * - Medusa's description is empty, or is still exactly what the sync wrote last (its fingerprint, metadata.bc_description_hash,
+ *   still matches): it is written, so a change made in BC arrives;
+ * - anything else is the team's own text and stays (`kept`). To hand a product back to BC, empty its description.
+ * The fingerprint is sent only along with a written description, so a kept text keeps the old one.
+ */
+export const descriptionUpdate = (product, current) => {
+  const { bc_description_hash: hash, ...metadata } = product.metadata ?? {};
+  const text = product.description;
+  if (!text) return { metadata };
+  const written = current.metadata?.bc_description_hash;
+  const ours = !current.description || (written !== undefined && textHash(current.description) === written);
+  if (!ours) return { metadata, kept: true };
+  return { metadata: { ...metadata, bc_description_hash: hash }, description: text };
+};
 
 async function products({ ctx, medusa, budget }) {
   const { state, summary } = ctx;
@@ -222,17 +280,21 @@ async function products({ ctx, medusa, budget }) {
     try {
       if (!current) {
         const { category_handle, draft_reason, ...body } = product;
+        const status = syncedStatus(product, null, ctx.state.context.publish);
         await medusa.post("/admin/products", {
           ...body,
-          status: "draft",
+          status,
           ...(categoryId ? { categories: [{ id: categoryId }] } : {}),
           ...(ctx.state.context.sales_channel_id ? { sales_channels: [{ id: ctx.state.context.sales_channel_id }] } : {}),
           ...(ctx.state.context.shipping_profile_id ? { shipping_profile_id: ctx.state.context.shipping_profile_id } : {}),
         });
         ctx.setResult("product", row.seq, { status: "created" });
         summary.products_created++;
+        if (status === "published") summary.products_published = (summary.products_published ?? 0) + 1;
       } else {
-        await updateProduct(ctx, medusa, product, current, categoryId);
+        const status = syncedStatus(product, current, ctx.state.context.publish);
+        await updateProduct(ctx, medusa, product, current, categoryId, status);
+        if (status === "published" && current.status !== "published") summary.products_published = (summary.products_published ?? 0) + 1;
         if (product.draft_reason && current.status !== "draft") {
           summary[`products_drafted_${product.draft_reason}`]++;
           ctx.note({
@@ -306,17 +368,19 @@ async function withPrices(ctx, write, body) {
 // rebuilds the options from them and orphans the variants' values. Variants
 // matched by SKU keep their ids; new BC variants get their option value
 // linked to the product first (options are shared), then are created.
-async function updateProduct(ctx, medusa, product, current, categoryId) {
+export async function updateProduct(ctx, medusa, product, current, categoryId, status) {
+  const text = descriptionUpdate(product, current);
+  if (text.kept) ctx.summary.descriptions_kept++;
+  else if (text.description !== undefined) ctx.summary.descriptions_written++;
   await medusa.post(`/admin/products/${current.id}`, {
     title: product.title,
     subtitle: product.subtitle ?? null,
     ...(product.hs_code ? { hs_code: product.hs_code } : {}),
-    metadata: product.metadata,
+    metadata: text.metadata,
+    ...(text.description !== undefined ? { description: text.description } : {}),
     ...(categoryId ? { categories: [{ id: categoryId }] } : {}),
-    // Blocked or out of stock in BC (per the options): a draft. Rejected by an
-    // older run: back in BC, a draft for an admin to publish. Otherwise the
-    // status is the admin's and stays as it is.
-    ...(product.draft_reason || current.status === "rejected" ? { status: "draft" } : {}),
+    // See syncedStatus: undefined leaves the admin's status as it is.
+    ...(status && status !== current.status ? { status } : {}),
   });
   const idBySku = new Map(current.variants.map((variant) => [variant.sku, variant.id]));
   for (const variant of product.variants) {
