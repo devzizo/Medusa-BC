@@ -125,6 +125,12 @@ secret is set, in which case every call needs `Authorization: Bearer <token>` an
 
 **From the Cloudflare dashboard (recommended):** Workers & Pages → Create → Import a repository → pick `devzizo/Medusa-BC`. Leave the build command empty; the deploy command is `npx wrangler deploy`.
 
+The Worker is connected to this repository: every push to `claude/gifted-darwin-463ch4` (the production
+branch) builds and deploys it. Pull requests from other branches run `npx wrangler preview`, which fails
+without a `previews` block in `wrangler.jsonc`; that red check does not block anything. Keep
+`MEDUSA_ADMIN_API_KEY` and `BC_CLIENT_SECRET` as encrypted **Secrets** on the Worker, never plain-text
+variables: a failed preview build prints plain-text variables in its log.
+
 **From the command line:**
 
 ```bash
