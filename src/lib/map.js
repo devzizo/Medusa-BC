@@ -217,6 +217,30 @@ export const marketingTextIndex = (rows, columns, items) => {
   return index;
 };
 
+// Preview Text, BC's plain copy of an Entity Text, stops at this many characters.
+export const PREVIEW_TEXT_LIMIT = 1024;
+
+/**
+ * What a Marketing Text page gives, for the Settings check: how many items it covers, whether the text is BC's
+ * 1024-character preview (cut short) or the full text, whether it is HTML, and one sample (the longest).
+ */
+export const marketingTextReport = (index, columns, rowCount) => {
+  const texts = [...index.entries()];
+  const longest = texts.reduce((best, entry) => (!best || entry[1].length > best[1].length ? entry : best), null);
+  // Exactly the limit is a cut preview; a longer text proves the page gives the whole text.
+  const atLimit = texts.filter(([, value]) => value.length === PREVIEW_TEXT_LIMIT).length;
+  return {
+    rows: rowCount,
+    items_with_text: texts.length,
+    link: columns.byNumber || columns.byId,
+    text_column: columns.text,
+    preview_only: columns.text === "Preview_Text",
+    texts_at_limit: atLimit,
+    html: texts.some(([, value]) => /<\/?[a-z][^>]*>/i.test(value)),
+    sample: longest ? { item: longest[0], length: longest[1].length, start: longest[1].slice(0, 300) } : null,
+  };
+};
+
 /** Item Card rows as item number → Tariff No. (the HS code). */
 export const hsCodeIndex = (rows) =>
   new Map(rows.map((row) => [text(row, "No"), text(row, "Tariff_No")]).filter(([no, tariff]) => no && tariff));

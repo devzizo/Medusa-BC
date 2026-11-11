@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import { expect } from "./expect.js";
 import { plainText, textHash } from "../src/lib/text.js";
-import { mapItems, marketingTextColumns, marketingTextIndex } from "../src/lib/map.js";
+import { mapItems, marketingTextColumns, marketingTextIndex, marketingTextReport } from "../src/lib/map.js";
 import { descriptionUpdate } from "../src/sync/items.js";
 
 describe("plainText", () => {
@@ -99,5 +99,20 @@ describe("Marketing Text from a published page", () => {
     expect(columns.byNumber).toBe("No");
     expect([...marketingTextIndex(rows, columns, items)]).toEqual([["2000", "<p>مفرش</p>"]]);
     expect(marketingTextColumns({ No: "1", Description: "x" })).toBe(null);
+  });
+});
+
+describe("marketingTextReport", () => {
+  it("flags Preview Text and texts cut at 1024 characters, HTML, and shows the longest as the sample", () => {
+    const columns = { byId: "Source_System_Id", text: "Preview_Text" };
+    const long = "م".repeat(1024);
+    const report = marketingTextReport(new Map([["1000", long], ["2000", "<p>قصير</p>"]]), columns, 3);
+    expect(report).toMatchObject({ rows: 3, items_with_text: 2, link: "Source_System_Id", text_column: "Preview_Text", preview_only: true, texts_at_limit: 1, html: true });
+    expect(report.sample).toMatchObject({ item: "1000", length: 1024 });
+    expect(report.sample.start.length).toBe(300);
+  });
+  it("reads a full-text page as whole when nothing reaches the limit", () => {
+    const report = marketingTextReport(new Map([["1000", "نص"], ["2000", "ن".repeat(2126)]]), { byNumber: "Item_No", text: "Marketing_Text" }, 2);
+    expect(report).toMatchObject({ preview_only: false, texts_at_limit: 0, html: false, link: "Item_No" });
   });
 });

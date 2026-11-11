@@ -1,6 +1,6 @@
 import { bcCredentials, listBcItemCategories, listBcItems, listBcItemVariants, listBcODataRows } from "../lib/bc.js";
 import { makeBudget, medusaClient } from "../lib/medusa.js";
-import { barcodeIndex, hsCodeIndex, mapCategories, mapItems, mapPriceLists, marketingTextColumns, marketingTextIndex } from "../lib/map.js";
+import { barcodeIndex, hsCodeIndex, mapCategories, mapItems, mapPriceLists, marketingTextColumns, marketingTextIndex, marketingTextReport } from "../lib/map.js";
 import { CATEGORY_PLACEMENT, placementParents, placementPatch } from "../lib/category-placement.js";
 import { textHash } from "../lib/text.js";
 
@@ -115,6 +115,25 @@ async function read({ ctx, medusa, bc, budget }) {
 export const DEFAULT_ITEM_REFERENCE_SERVICE = "ItemReferences";
 export const DEFAULT_ITEM_CARD_SERVICE = "ItemCard";
 export const DEFAULT_MARKETING_TEXT_SERVICE = "MarketingText";
+
+/**
+ * Reads a Marketing Text page as the item sync does, and reports what it found (Settings → "فحص Marketing Text").
+ * Writes nothing. Throws with the reason when the page cannot be used.
+ */
+export async function checkMarketingTextService(bc, settings, listItems) {
+  const service = settings.marketing_text_service || DEFAULT_MARKETING_TEXT_SERVICE;
+  const [sample] = await listBcODataRows(bc, settings.company_name, service, "$top=1").catch((error) => {
+    throw new Error(`${error.message} (web service "${service}")`);
+  });
+  if (!sample) throw new Error(`web service "${service}" returned no rows (page 2011 Entity Text Factbox Part always does: its table is temporary; publish a list page over the Entity Text table instead)`);
+  const columns = marketingTextColumns(sample);
+  const found = Object.keys(sample).filter((key) => !key.startsWith("@"));
+  if (!columns) throw new Error(`web service "${service}" has no item link (No, Item_No or Source_System_Id) and text (Marketing_Text, Text or Preview_Text); its columns: ${found.join(", ")}`);
+  const rows = await listBcODataRows(bc, settings.company_name, service, `$select=${columns.select.join(",")}`);
+  // Linking by item id needs the items' ids; by number it does not.
+  const items = columns.byId ? await listItems() : [];
+  return { service, columns: found, ...marketingTextReport(marketingTextIndex(rows, columns, items), columns, rows.length) };
+}
 
 /**
  * Marketing Text is not on API v2.0's items: BC keeps it apart (the Entity Text table), so it is read from a page
