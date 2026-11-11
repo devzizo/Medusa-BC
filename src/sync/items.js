@@ -126,7 +126,9 @@ async function readMarketingTexts(ctx, bc, items, options) {
   const service = settings.marketing_text_service || DEFAULT_MARKETING_TEXT_SERVICE;
   try {
     const [sample] = await listBcODataRows(bc, settings.company_name, service, "$top=1", options);
-    if (!sample) return new Map();
+    // A page that answers with no rows at all is the wrong page, e.g. 2011 "Entity Text Factbox Part", whose table is
+    // temporary and filled only inside the item card: say so rather than read it as "no item has a text".
+    if (!sample) throw new Error(`web service "${service}" returned no rows (page 2011 Entity Text Factbox Part always does: its table is temporary; publish a list page over the Entity Text table instead)`);
     const columns = marketingTextColumns(sample);
     if (!columns) {
       throw new Error(`web service "${service}" has no item link (No, Item_No or Source_System_Id) and text (Marketing_Text, Text or Preview_Text); its columns: ${Object.keys(sample).filter((key) => !key.startsWith("@")).join(", ")}`);
