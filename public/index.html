@@ -149,9 +149,12 @@
           <div><label for="shipping_agent_service"><bdi>Shipping Agents (428) web service</bdi></label><input id="shipping_agent_service" data-testid="shipping-agent-service"></div>
           <div><label for="item_reference_service"><bdi>Item Reference Entries (5737) web service</bdi> — الباركود</label><input id="item_reference_service" data-testid="item-reference-service"></div>
           <div><label for="item_card_service"><bdi>Item Card (30) web service</bdi> — HS code</label><input id="item_card_service" data-testid="item-card-service"></div>
+          <div><label for="marketing_text_service"><bdi>Marketing Text web service</bdi> — وصف المنتج</label><input id="marketing_text_service" data-testid="marketing-text-service"></div>
         </div>
         <p class="hint">مجموعة VAT تحدد قوائم الأسعار الشاملة للضريبة المقبولة للمتجر، والمجموعة العامة محفوظة للمستندات. الصفحات تُنشر في BC من Web Services؛ الاسم الفارغ = الاسم الظاهر.</p>
-        <div class="row" style="margin-top:12px"><button id="save-settings" data-testid="save-settings">حفظ</button></div>
+        <div class="row" style="margin-top:12px"><button id="save-settings" data-testid="save-settings">حفظ</button>
+          <button id="check-marketing" class="ghost" data-testid="check-marketing">فحص Marketing Text</button></div>
+        <div class="result" id="result-marketing" data-testid="result-marketing"></div>
         <div class="result" id="result-settings" data-testid="result-settings"></div>
       </div>
       <div class="panel" data-testid="price-lists-panel">
@@ -400,7 +403,7 @@
     addEventListener("hashchange", showTab);
 
     // ---- Settings tab ----
-    const FIELDS = ["vat_bus_posting_group", "gen_bus_posting_group", "price_list_service", "price_list_line_service", "inventory_service", "shipping_agent_service", "item_reference_service", "item_card_service"];
+    const FIELDS = ["vat_bus_posting_group", "gen_bus_posting_group", "price_list_service", "price_list_line_service", "inventory_service", "shipping_agent_service", "item_reference_service", "item_card_service", "marketing_text_service"];
     let saved = {};
     let medusaUrl = "";
     const renderEnv = (target, rows) => {
@@ -441,6 +444,7 @@
         $("shipping_agent_service").placeholder = data.defaults.shipping_agent_service;
         $("item_reference_service").placeholder = data.defaults.item_reference_service;
         $("item_card_service").placeholder = data.defaults.item_card_service;
+        $("marketing_text_service").placeholder = data.defaults.marketing_text_service;
         chosenLists = parseChosen(saved.price_lists);
         document.querySelector(`[name=price_list_mode][value=${chosenLists ? "chosen" : "all"}]`).checked = true;
         showCompany();
@@ -622,7 +626,7 @@
         summary: [
           ["bc_categories", "فئات في BC"], ["categories_created", "فئات أُنشئت"], ["categories_updated", "فئات تغيّر اسمها"],
           ["bc_items", "أصناف في BC (غير محظورة)"], ["bc_variants", "متغيرات في BC"],
-          ["bc_barcodes", "باركود من Item References"], ["bc_hs_codes", "HS code من بطاقة الصنف"],
+          ["bc_barcodes", "باركود من Item References"], ["bc_hs_codes", "HS code من بطاقة الصنف"], ["bc_marketing_texts", "Marketing Text مقروء من BC"],
           ["products_created", "منتجات أُنشئت"], ["products_published", "منتجات أصبحت منشورة (Published)"], ["products_updated", "منتجات حُدّثت"], ["products_unchanged", "أصناف لم تتغير في BC (لم تُحدَّث)"], ["products_skipped", "أصناف تُخطيت"],
           ["descriptions_written", "أوصاف كُتبت من Marketing Text في BC"], ["descriptions_kept", "أوصاف تُركت كما هي (عدّلها الفريق في Medusa)"],
           ["products_drafted", "منتجات تحولت إلى draft (handle غير موجود في BC)"],
@@ -883,6 +887,36 @@
         show($("result-orders"), false, escape(error.message));
       }
       renderOrders();
+    });
+
+    // Reads the Marketing Text page as the item sync would (nothing is written) and says whether it can feed the descriptions.
+    $("check-marketing").addEventListener("click", async () => {
+      const box = $("result-marketing");
+      $("check-marketing").disabled = true;
+      box.className = "result";
+      box.innerHTML = `<p class="notice">جارٍ قراءة الصفحة من BC…</p>`;
+      try {
+        const r = await api("check/marketing-text", {});
+        const ok = r.items_with_text > 0;
+        const cut = r.preview_only || r.texts_at_limit > 0;
+        show(box, ok && !cut, `
+          <p><strong>${ok ? (cut ? "الصفحة تعمل، لكن النص مقطوع" : "الصفحة تعمل والنص كامل") : "الصفحة تُقرأ لكن لم يُربط أي نص بصنف"}</strong></p>
+          <table class="summary" data-testid="marketing-report">
+            <tr><td>الخدمة</td><td class="mono">${escape(r.service)}</td></tr>
+            <tr><td>الصفوف في الصفحة</td><td>${escape(r.rows)}</td></tr>
+            <tr><td>أصناف لها نص</td><td data-testid="marketing-items">${escape(r.items_with_text)}</td></tr>
+            <tr><td>الربط بالصنف عبر</td><td class="mono">${escape(r.link)}</td></tr>
+            <tr><td>عمود النص</td><td><span class="mono">${escape(r.text_column)}</span>${r.preview_only ? " — النسخة المختصرة (حدها 1024 حرفًا)" : ""}</td></tr>
+            <tr><td>نصوص وصلت حد 1024 حرفًا</td><td>${escape(r.texts_at_limit)}</td></tr>
+            <tr><td>منسّق (HTML)</td><td>${r.html ? "نعم، يُحوَّل لنص عند المزامنة" : "لا"}</td></tr>
+            <tr><td>أعمدة الصفحة</td><td class="mono">${escape(r.columns.join(", "))}</td></tr>
+          </table>
+          ${r.sample ? `<p class="notice">أطول نص: الصنف <bdi class="mono">${escape(r.sample.item)}</bdi> (${escape(r.sample.length)} حرفًا)</p><p class="notice" style="white-space:pre-wrap"><bdi>${escape(r.sample.start)}${r.sample.length > 300 ? "…" : ""}</bdi></p>` : ""}`);
+      } catch (error) {
+        show(box, false, `<bdi>${escape(error.message)}</bdi>`);
+      } finally {
+        $("check-marketing").disabled = false;
+      }
     });
 
     loadSettings().then(showTab);

@@ -178,6 +178,69 @@ export const barcodeIndex = (rows, baseUnitByItem = new Map()) => {
   return index;
 };
 
+// ---- Marketing Text (not in API v2.0: a page published as a web service) ----
+
+const MARKETING_KEY_BY_NUMBER = ["No", "Item_No", "Source_No", "Item_Number"];
+const MARKETING_KEY_BY_ID = ["Source_System_Id", "SystemId", "Item_Id", "Item_System_Id"];
+const MARKETING_TEXT = ["Marketing_Text", "MarketingText", "Text", "Preview_Text", "Entity_Text"];
+
+/**
+ * The columns a Marketing Text page links and carries its text by, read off one row, since the page is whichever one
+ * the team published: an item page with a Marketing Text field (linked by item number), or the Entity Text table
+ * (linked by the item's id, Source System Id). Null when it has neither a link nor a text.
+ */
+export const marketingTextColumns = (sample) => {
+  if (!sample) return null;
+  const has = (column) => column in sample;
+  const byNumber = MARKETING_KEY_BY_NUMBER.find(has);
+  const byId = byNumber ? undefined : MARKETING_KEY_BY_ID.find(has);
+  const text = MARKETING_TEXT.find(has);
+  if (!(byNumber || byId) || !text) return null;
+  const filters = ["Source_Table_Id", "Scenario"].filter(has);
+  return { byNumber, byId, text, select: [byNumber || byId, text, ...filters] };
+};
+
+/**
+ * Marketing Text rows as item number → text. Entity Text rows of another table (Source Table Id other than 27, Item)
+ * or another scenario than Marketing Text are left out. The first non-empty text per item wins.
+ */
+export const marketingTextIndex = (rows, columns, items) => {
+  const numberById = new Map(items.map((item) => [String(item.id).toLowerCase(), item.number]));
+  const index = new Map();
+  for (const row of rows) {
+    if ("Source_Table_Id" in row && Number(row.Source_Table_Id) !== 27) continue;
+    if ("Scenario" in row && row.Scenario && !/marketing/i.test(String(row.Scenario))) continue;
+    const number = columns.byNumber ? text(row, columns.byNumber) : numberById.get(text(row, columns.byId).toLowerCase());
+    const value = text(row, columns.text);
+    if (number && value && !index.has(number)) index.set(number, value);
+  }
+  return index;
+};
+
+// Preview Text, BC's plain copy of an Entity Text, stops at this many characters.
+export const PREVIEW_TEXT_LIMIT = 1024;
+
+/**
+ * What a Marketing Text page gives, for the Settings check: how many items it covers, whether the text is BC's
+ * 1024-character preview (cut short) or the full text, whether it is HTML, and one sample (the longest).
+ */
+export const marketingTextReport = (index, columns, rowCount) => {
+  const texts = [...index.entries()];
+  const longest = texts.reduce((best, entry) => (!best || entry[1].length > best[1].length ? entry : best), null);
+  // Exactly the limit is a cut preview; a longer text proves the page gives the whole text.
+  const atLimit = texts.filter(([, value]) => value.length === PREVIEW_TEXT_LIMIT).length;
+  return {
+    rows: rowCount,
+    items_with_text: texts.length,
+    link: columns.byNumber || columns.byId,
+    text_column: columns.text,
+    preview_only: columns.text === "Preview_Text",
+    texts_at_limit: atLimit,
+    html: texts.some(([, value]) => /<\/?[a-z][^>]*>/i.test(value)),
+    sample: longest ? { item: longest[0], length: longest[1].length, start: longest[1].slice(0, 300) } : null,
+  };
+};
+
 /** Item Card rows as item number → Tariff No. (the HS code). */
 export const hsCodeIndex = (rows) =>
   new Map(rows.map((row) => [text(row, "No"), text(row, "Tariff_No")]).filter(([no, tariff]) => no && tariff));

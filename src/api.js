@@ -1,15 +1,16 @@
-import { bcCredentials, listBcCompanies, listBcLocations, listBcODataRows, listBcPaymentMethods } from "./lib/bc.js";
+import { bcCredentials, listBcCompanies, listBcItems, listBcLocations, listBcODataRows, listBcPaymentMethods } from "./lib/bc.js";
 import { mapPriceLists } from "./lib/map.js";
 import { medusaClient } from "./lib/medusa.js";
 import { checkBusinessCentral, checkMedusa, describeSettings, isAuthorized } from "./config.js";
 import { DEFAULT_INVENTORY_SERVICE } from "./sync/inventory.js";
 import { postOrder, refreshOrder } from "./sync/orders.js";
-import { DEFAULT_ITEM_CARD_SERVICE, DEFAULT_ITEM_REFERENCE_SERVICE, DEFAULT_PRICE_LIST_LINE_SERVICE, DEFAULT_PRICE_LIST_SERVICE } from "./sync/items.js";
+import { checkMarketingTextService, DEFAULT_ITEM_CARD_SERVICE, DEFAULT_MARKETING_TEXT_SERVICE, DEFAULT_ITEM_REFERENCE_SERVICE, DEFAULT_PRICE_LIST_LINE_SERVICE, DEFAULT_PRICE_LIST_SERVICE } from "./sync/items.js";
 
 // The middleware API behind the admin page. Everything the page saves lives
 // in the MiddlewareStore Durable Object; connection settings come from env.
 //
 //   GET  /api/middleware/status                 env settings (set/missing) + saved settings
+//   POST /api/middleware/check/marketing-text    reads the Marketing Text page as the sync would; writes nothing
 //   POST /api/middleware/check/{bc,medusa}      live connection checks
 //   POST /api/middleware/company                { company_id } chosen from BC's list
 //   POST /api/middleware/settings               posting groups and price list service names
@@ -66,6 +67,7 @@ const PUBLIC_SETTINGS = [
   "shipping_agent_service",
   "item_reference_service",
   "item_card_service",
+  "marketing_text_service",
   "vat_bus_posting_group",
   "gen_bus_posting_group",
   "price_list_service",
@@ -102,10 +104,18 @@ export async function middlewareApi(request, env, pathname) {
         shipping_agent_service: DEFAULT_SHIPPING_AGENT_SERVICE,
         item_reference_service: DEFAULT_ITEM_REFERENCE_SERVICE,
         item_card_service: DEFAULT_ITEM_CARD_SERVICE,
+        marketing_text_service: DEFAULT_MARKETING_TEXT_SERVICE,
       },
     });
   }
   if (pathname === "/api/middleware/check/medusa" && method === "POST") return json(await checkMedusa(env));
+  if (pathname === "/api/middleware/check/marketing-text" && method === "POST") {
+    const saved = await db.getSettings();
+    if (!saved.company_id) return fail("Choose a Business Central company in Settings first.", 409);
+    const bc = bcCredentials(env);
+    const report = await checkMarketingTextService(bc, saved, () => listBcItems(bc, saved.company_id, undefined, { includeBlocked: true })).catch((error) => ({ error: errorMessage(error) }));
+    return report.error ? fail(report.error, 502) : json(report);
+  }
   if (pathname === "/api/middleware/check/bc" && method === "POST") {
     return json(await checkBusinessCentral(env, (await db.getSettings()).company_id));
   }

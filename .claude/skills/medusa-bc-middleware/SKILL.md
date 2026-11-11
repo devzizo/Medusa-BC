@@ -76,6 +76,9 @@ It replaces the in-Medusa plugin `@hoven/medusa-bc` (repo `devzizo/essentials-st
 17. **"Only changed items" is on by default**: skip writing an item BC did not modify since the start of the last
     successful item sync, but never skip a new product, a new variant or a status change, and keep a skipped
     product in the price lists (`unchanged` counts as owned). Always read the full item list.
+18. **Marketing Text is not on API v2.0 items** (PR #8 assumed it and wrote 0 descriptions in production): read it
+    from the published page (`marketing_text_service`), columns detected, Entity Text rows of other tables or
+    scenarios dropped. Never clear or overwrite a description the team changed.
 
 ## How to verify (before any deploy)
 
