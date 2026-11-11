@@ -4,6 +4,7 @@
 // category (bc-cat-<slug>), so an entry names exactly one category.
 //
 //   parent: the handle of an existing store category to nest it under.
+//   top: true makes it a top-level category (taken out of any parent it sits under).
 //   active: false hides the category from the storefront (products stay).
 //
 // A category without an entry is left where Medusa has it: undecided ones
@@ -16,8 +17,9 @@ export const CATEGORY_PLACEMENT = {
   "bc-cat-59f8729c": { parent: "c1069658806" }, // حشوات
   // المعطرات
   "bc-cat-7701477e": { parent: "home-fragrances" }, // معطرات
-  // مراتب فاخرة
-  "bc-cat-66a0ef4f": { parent: "luxury-mattresses" }, // مراتب
+  // The mattresses are BC's own category, at the top of the tree, named in BC («المراتب الفاخرة»); the store's old
+  // «مراتب فاخرة» wrapper (luxury-mattresses) is dropped (the owner, 2026-11-11)
+  "bc-cat-66a0ef4f": { top: true }, // مراتب
   "bc-cat-46862080": { active: false }, // مرتبة: cancelled by the owner (a duplicate of مراتب)
   // عازل مراتب و شراشف مغاط
   "bc-cat-99d4cd83": { parent: "mattress-protector" }, // شراشف
@@ -71,6 +73,7 @@ export const placementPatch = (handle, current, parent) => {
     if (!parent) missingParent = placement.parent;
     else if (current.parent_category_id !== parent.id) patch.parent_category_id = parent.id;
   }
+  if (placement.top && current.parent_category_id) patch.parent_category_id = null;
   if (placement.active === false && current.is_active !== false) patch.is_active = false;
   return { patch: Object.keys(patch).length ? patch : null, missingParent };
 };
