@@ -149,6 +149,7 @@
           <div><label for="shipping_agent_service"><bdi>Shipping Agents (428) web service</bdi></label><input id="shipping_agent_service" data-testid="shipping-agent-service"></div>
           <div><label for="item_reference_service"><bdi>Item Reference Entries (5737) web service</bdi> — الباركود</label><input id="item_reference_service" data-testid="item-reference-service"></div>
           <div><label for="item_card_service"><bdi>Item Card (30) web service</bdi> — HS code</label><input id="item_card_service" data-testid="item-card-service"></div>
+          <div><label for="marketing_text_service"><bdi>Marketing Text web service</bdi> — وصف المنتج</label><input id="marketing_text_service" data-testid="marketing-text-service"></div>
         </div>
         <p class="hint">مجموعة VAT تحدد قوائم الأسعار الشاملة للضريبة المقبولة للمتجر، والمجموعة العامة محفوظة للمستندات. الصفحات تُنشر في BC من Web Services؛ الاسم الفارغ = الاسم الظاهر.</p>
         <div class="row" style="margin-top:12px"><button id="save-settings" data-testid="save-settings">حفظ</button></div>
@@ -400,7 +401,7 @@
     addEventListener("hashchange", showTab);
 
     // ---- Settings tab ----
-    const FIELDS = ["vat_bus_posting_group", "gen_bus_posting_group", "price_list_service", "price_list_line_service", "inventory_service", "shipping_agent_service", "item_reference_service", "item_card_service"];
+    const FIELDS = ["vat_bus_posting_group", "gen_bus_posting_group", "price_list_service", "price_list_line_service", "inventory_service", "shipping_agent_service", "item_reference_service", "item_card_service", "marketing_text_service"];
     let saved = {};
     let medusaUrl = "";
     const renderEnv = (target, rows) => {
@@ -441,6 +442,7 @@
         $("shipping_agent_service").placeholder = data.defaults.shipping_agent_service;
         $("item_reference_service").placeholder = data.defaults.item_reference_service;
         $("item_card_service").placeholder = data.defaults.item_card_service;
+        $("marketing_text_service").placeholder = data.defaults.marketing_text_service;
         chosenLists = parseChosen(saved.price_lists);
         document.querySelector(`[name=price_list_mode][value=${chosenLists ? "chosen" : "all"}]`).checked = true;
         showCompany();
@@ -622,7 +624,7 @@
         summary: [
           ["bc_categories", "فئات في BC"], ["categories_created", "فئات أُنشئت"], ["categories_updated", "فئات تغيّر اسمها"],
           ["bc_items", "أصناف في BC (غير محظورة)"], ["bc_variants", "متغيرات في BC"],
-          ["bc_barcodes", "باركود من Item References"], ["bc_hs_codes", "HS code من بطاقة الصنف"],
+          ["bc_barcodes", "باركود من Item References"], ["bc_hs_codes", "HS code من بطاقة الصنف"], ["bc_marketing_texts", "Marketing Text مقروء من BC"],
           ["products_created", "منتجات أُنشئت"], ["products_published", "منتجات أصبحت منشورة (Published)"], ["products_updated", "منتجات حُدّثت"], ["products_unchanged", "أصناف لم تتغير في BC (لم تُحدَّث)"], ["products_skipped", "أصناف تُخطيت"],
           ["descriptions_written", "أوصاف كُتبت من Marketing Text في BC"], ["descriptions_kept", "أوصاف تُركت كما هي (عدّلها الفريق في Medusa)"],
           ["products_drafted", "منتجات تحولت إلى draft (handle غير موجود في BC)"],

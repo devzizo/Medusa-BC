@@ -46,3 +46,12 @@ describe("unchangedSince", () => {
     expect(unchangedSince(product("2026-11-09T10:00:00Z"), null, since, "published")).toBe(false);
   });
 });
+
+describe("unchangedSince and Marketing Text", () => {
+  it("counts a new or changed Marketing Text as a change, since it lives outside the item record", () => {
+    const since = "2026-11-10T08:00:00.000Z";
+    const product = { metadata: { bc_last_modified: "2026-11-09T10:00:00Z", bc_description_hash: "abc" }, variants: [{ sku: "1000" }] };
+    expect(unchangedSince(product, { status: "published", metadata: { bc_description_hash: "abc" }, variants: [{ sku: "1000" }] }, since, "published")).toBe(true);
+    expect(unchangedSince(product, { status: "published", metadata: {}, variants: [{ sku: "1000" }] }, since, "published")).toBe(false);
+  });
+});

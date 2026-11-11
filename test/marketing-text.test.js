@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import { expect } from "./expect.js";
 import { plainText, textHash } from "../src/lib/text.js";
-import { mapItems } from "../src/lib/map.js";
+import { mapItems, marketingTextColumns, marketingTextIndex } from "../src/lib/map.js";
 import { descriptionUpdate } from "../src/sync/items.js";
 
 describe("plainText", () => {
@@ -78,5 +78,26 @@ describe("descriptionUpdate", () => {
   it("never clears a description when BC has no text", () => {
     const result = descriptionUpdate({ metadata: { bc_item_number: "IT1" } }, { description: "كتبه الفريق", metadata: {} });
     expect(result).toEqual({ metadata: { bc_item_number: "IT1" } });
+  });
+});
+
+describe("Marketing Text from a published page", () => {
+  const items = [{ id: "AAAA-1111", number: "1000" }, { id: "bbbb-2222", number: "2000" }];
+  it("reads the Entity Text table: by the item's id, items only, the Marketing Text scenario only", () => {
+    const rows = [
+      { Source_Table_Id: 27, Source_System_Id: "aaaa-1111", Scenario: "Marketing Text", Preview_Text: "مرتبة فندقية" },
+      { Source_Table_Id: 18, Source_System_Id: "bbbb-2222", Scenario: "Marketing Text", Preview_Text: "عميل" },
+      { Source_Table_Id: 27, Source_System_Id: "bbbb-2222", Scenario: "Other", Preview_Text: "غير" },
+    ];
+    const columns = marketingTextColumns(rows[0]);
+    expect(columns).toEqual({ byNumber: undefined, byId: "Source_System_Id", text: "Preview_Text", select: ["Source_System_Id", "Preview_Text", "Source_Table_Id", "Scenario"] });
+    expect([...marketingTextIndex(rows, columns, items)]).toEqual([["1000", "مرتبة فندقية"]]);
+  });
+  it("reads an item page with a Marketing Text field, by item number, and refuses a page with neither", () => {
+    const rows = [{ No: "2000", Marketing_Text: "<p>مفرش</p>" }, { No: "1000", Marketing_Text: "" }];
+    const columns = marketingTextColumns(rows[0]);
+    expect(columns.byNumber).toBe("No");
+    expect([...marketingTextIndex(rows, columns, items)]).toEqual([["2000", "<p>مفرش</p>"]]);
+    expect(marketingTextColumns({ No: "1", Description: "x" })).toBe(null);
   });
 });

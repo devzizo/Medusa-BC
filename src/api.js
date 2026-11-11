@@ -4,7 +4,7 @@ import { medusaClient } from "./lib/medusa.js";
 import { checkBusinessCentral, checkMedusa, describeSettings, isAuthorized } from "./config.js";
 import { DEFAULT_INVENTORY_SERVICE } from "./sync/inventory.js";
 import { postOrder, refreshOrder } from "./sync/orders.js";
-import { DEFAULT_ITEM_CARD_SERVICE, DEFAULT_ITEM_REFERENCE_SERVICE, DEFAULT_PRICE_LIST_LINE_SERVICE, DEFAULT_PRICE_LIST_SERVICE } from "./sync/items.js";
+import { DEFAULT_ITEM_CARD_SERVICE, DEFAULT_MARKETING_TEXT_SERVICE, DEFAULT_ITEM_REFERENCE_SERVICE, DEFAULT_PRICE_LIST_LINE_SERVICE, DEFAULT_PRICE_LIST_SERVICE } from "./sync/items.js";
 
 // The middleware API behind the admin page. Everything the page saves lives
 // in the MiddlewareStore Durable Object; connection settings come from env.
@@ -66,6 +66,7 @@ const PUBLIC_SETTINGS = [
   "shipping_agent_service",
   "item_reference_service",
   "item_card_service",
+  "marketing_text_service",
   "vat_bus_posting_group",
   "gen_bus_posting_group",
   "price_list_service",
@@ -102,6 +103,7 @@ export async function middlewareApi(request, env, pathname) {
         shipping_agent_service: DEFAULT_SHIPPING_AGENT_SERVICE,
         item_reference_service: DEFAULT_ITEM_REFERENCE_SERVICE,
         item_card_service: DEFAULT_ITEM_CARD_SERVICE,
+        marketing_text_service: DEFAULT_MARKETING_TEXT_SERVICE,
       },
     });
   }

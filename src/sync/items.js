@@ -1,6 +1,6 @@
 import { bcCredentials, listBcItemCategories, listBcItems, listBcItemVariants, listBcODataRows } from "../lib/bc.js";
 import { makeBudget, medusaClient } from "../lib/medusa.js";
-import { barcodeIndex, hsCodeIndex, mapCategories, mapItems, mapPriceLists } from "../lib/map.js";
+import { barcodeIndex, hsCodeIndex, mapCategories, mapItems, mapPriceLists, marketingTextColumns, marketingTextIndex } from "../lib/map.js";
 import { CATEGORY_PLACEMENT, placementParents, placementPatch } from "../lib/category-placement.js";
 import { textHash } from "../lib/text.js";
 
@@ -82,6 +82,9 @@ async function read({ ctx, medusa, bc, budget }) {
   const { shipping_profiles } = await medusa.get("/admin/shipping-profiles", { type: "default", limit: 1, fields: "id" });
 
   const extras = await readBarcodesAndHsCodes(ctx, bc, bcItems, options);
+  const marketing = await readMarketingTexts(ctx, bc, bcItems, options);
+  // The page's text becomes the item's Marketing Text (map.js turns it into the description, items.js writes it only where safe).
+  if (marketing) for (const item of bcItems) item.marketingText = marketing.get(item.number);
   const mapped = mapItems(bcItems, bcVariants, currency.toLowerCase(), { draftZeroInventory, ...extras });
   mapped.issues.forEach(ctx.note);
   ctx.putWork("category", mapCategories(bcCategories).map((category) => ({ key: category.handle, payload: category })));
@@ -111,6 +114,32 @@ async function read({ ctx, medusa, bc, budget }) {
 
 export const DEFAULT_ITEM_REFERENCE_SERVICE = "ItemReferences";
 export const DEFAULT_ITEM_CARD_SERVICE = "ItemCard";
+export const DEFAULT_MARKETING_TEXT_SERVICE = "MarketingText";
+
+/**
+ * Marketing Text is not on API v2.0's items: BC keeps it apart (the Entity Text table), so it is read from a page
+ * published as a web service, its columns detected. Null when the page cannot be read (noted, and descriptions stay
+ * as they are), so a missing page never clears anything.
+ */
+async function readMarketingTexts(ctx, bc, items, options) {
+  const { settings, summary } = ctx;
+  const service = settings.marketing_text_service || DEFAULT_MARKETING_TEXT_SERVICE;
+  try {
+    const [sample] = await listBcODataRows(bc, settings.company_name, service, "$top=1", options);
+    if (!sample) return new Map();
+    const columns = marketingTextColumns(sample);
+    if (!columns) {
+      throw new Error(`web service "${service}" has no item link (No, Item_No or Source_System_Id) and text (Marketing_Text, Text or Preview_Text); its columns: ${Object.keys(sample).filter((key) => !key.startsWith("@")).join(", ")}`);
+    }
+    const rows = await listBcODataRows(bc, settings.company_name, service, `$select=${columns.select.join(",")}`, options);
+    const index = marketingTextIndex(rows, columns, items);
+    summary.bc_marketing_texts = index.size;
+    return index;
+  } catch (error) {
+    ctx.note({ kind: "marketing_text_source", ref: "Marketing Text", message: `Marketing Text not read: ${error.message}. Publish the page that holds it as a web service and set its name in Settings. Descriptions stay as they are.` });
+    return null;
+  }
+}
 
 /**
  * Only the columns a published page really has: naming one it lacks is a 400
@@ -245,6 +274,9 @@ export const unchangedSince = (product, current, since, status) => {
   if (!since || !current) return false;
   const modified = Date.parse(product.metadata?.bc_last_modified ?? "");
   if (!Number.isFinite(modified) || modified >= Date.parse(since)) return false;
+  // Marketing Text lives outside the item record, so a new or changed text counts as a change.
+  const textHashNow = product.metadata?.bc_description_hash;
+  if (textHashNow && current.metadata?.bc_description_hash !== textHashNow) return false;
   const skus = new Set(current.variants.map((variant) => variant.sku));
   if (product.variants.some((variant) => !skus.has(variant.sku))) return false;
   return !status || status === current.status;

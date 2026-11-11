@@ -25,7 +25,10 @@ The admin page (`public/index.html`, Arabic, RTL) has five tabs, the same tools 
    written; the first run, or the option off, writes every item).
    **Barcodes** come from Item References (page 5737, type Bar Code, per variant, base unit only;
    items without variants fall back to the GTIN) and **HS codes** from the Item Card's Tariff No.
-   (page 30): neither is in API v2.0, so both pages must be published (names in Settings). A third
+   (page 30): neither is in API v2.0, so both pages must be published (names in Settings).
+   **Marketing Text** (the product description) is not on API v2.0's items either: BC keeps it in the Entity Text
+   table. It is read from a page published as a web service (Settings, default `MarketingText`), linked by item
+   number or by the item's id (`Source_System_Id`); a description the team changed in Medusa is never overwritten. A third
    sub-tab, **الصور (Images)**, moves each BC item's picture to the product the sync created, through
    Medusa's file storage (S3/R2 on Medusa Cloud): first image, and thumbnail unless the admin chose
    another; images added in Medusa stay; an unchanged picture is not uploaded again; one removed in

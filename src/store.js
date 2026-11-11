@@ -32,6 +32,7 @@ export const SETTING_KEYS = [
   "shipping_agent_service",
   "item_reference_service",
   "item_card_service",
+  "marketing_text_service",
   // Order posting (Orders tab): default BC customer, shipping line, default location, BC's local currency.
   "order_customer_number",
   "order_shipping_type",
