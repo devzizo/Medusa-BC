@@ -10,25 +10,35 @@ describe("placementParents", () => {
 });
 
 describe("placementPatch", () => {
-  const parent = { id: "cat_parent", handle: "luxury-mattresses" };
+  const parent = { id: "cat_parent", handle: "مخدات" };
 
   it("does nothing for a category without a placement", () => {
     expect(placementPatch("bc-cat-79cc29ad", { id: "c", parent_category_id: null, is_active: true }, undefined)).toEqual({ patch: null });
   });
 
   it("nests a category under its parent", () => {
-    const result = placementPatch("bc-cat-66a0ef4f", { id: "c", parent_category_id: null, is_active: true }, parent);
+    const result = placementPatch("bc-cat-2170ece4", { id: "c", parent_category_id: null, is_active: true }, parent);
     expect(result.patch).toEqual({ parent_category_id: "cat_parent" });
   });
 
   it("is idempotent: a second run changes nothing", () => {
-    const result = placementPatch("bc-cat-66a0ef4f", { id: "c", parent_category_id: "cat_parent", is_active: true }, parent);
+    const result = placementPatch("bc-cat-2170ece4", { id: "c", parent_category_id: "cat_parent", is_active: true }, parent);
     expect(result.patch).toEqual(null);
   });
 
   it("reports a missing parent instead of guessing", () => {
-    const result = placementPatch("bc-cat-66a0ef4f", { id: "c", parent_category_id: null, is_active: true }, undefined);
-    expect(result).toEqual({ patch: null, missingParent: "luxury-mattresses" });
+    const result = placementPatch("bc-cat-2170ece4", { id: "c", parent_category_id: null, is_active: true }, undefined);
+    expect(result).toEqual({ patch: null, missingParent: "مخدات" });
+  });
+
+  it("takes the mattresses out of the old wrapper to the top of the tree, once", () => {
+    expect(CATEGORY_PLACEMENT["bc-cat-66a0ef4f"]).toEqual({ top: true });
+    expect(placementPatch("bc-cat-66a0ef4f", { id: "c", parent_category_id: "cat_luxury", is_active: true }, undefined)).toEqual({ patch: { parent_category_id: null }, missingParent: null });
+    expect(placementPatch("bc-cat-66a0ef4f", { id: "c", parent_category_id: null, is_active: true }, undefined).patch).toEqual(null);
+  });
+
+  it("asks for no parent for a top-level category", () => {
+    expect(placementParents(["bc-cat-66a0ef4f"])).toEqual([]);
   });
 
   it("hides a cancelled category once", () => {
