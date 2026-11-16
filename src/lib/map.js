@@ -129,6 +129,8 @@ export const mapItems = (items, variants, currencyCode, options = {}) => {
         variants: productVariants,
         category_handle: item.itemCategoryCode ? categoryHandle(item.itemCategoryCode) : null,
         draft_reason: draftReason(item, options),
+        // BC's Unit Cost. Never goes into metadata (the store API returns it to everyone): items.js sends it to Medusa's admin-only /admin/product-costs.
+        unit_cost: typeof item.unitCost === "number" && item.unitCost > 0 ? money(item.unitCost) : undefined,
         metadata: {
           ...shared,
           bc_type: item.type,
