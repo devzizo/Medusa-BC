@@ -24,7 +24,7 @@ export const DEFAULT_PRICE_LIST_LINE_SERVICE = "PriceListLines";
 
 /** One step of the item sync. Returns true when the run is finished. */
 export const runItemSyncStep = (ctx, env) =>
-  runSteps(ctx, env, { read, categories, products, toDraft, priceListsRead, variantIds, priceLists });
+  runSteps(ctx, env, { read, categories, products, toDraft, costs, priceListsRead, variantIds, priceLists });
 
 /**
  * One step of the category sync: BC's item categories into Medusa and
@@ -354,7 +354,7 @@ async function products({ ctx, medusa, budget }) {
     const categoryId = product.category_handle ? categoryIds.get(product.category_handle) : undefined;
     try {
       if (!current) {
-        const { category_handle, draft_reason, ...body } = product;
+        const { category_handle, draft_reason, unit_cost, ...body } = product;
         const status = syncedStatus(product, null, ctx.state.context.publish);
         await medusa.post("/admin/products", {
           ...body,
@@ -517,7 +517,7 @@ async function toDraft({ ctx, medusa, budget }) {
   const products = ctx.work("product");
   if (!products.length) {
     ctx.note({ kind: "product", ref: "-", message: "Business Central returned no items; no product was changed to draft." });
-    return next(state, "priceListsRead");
+    return next(state, "costs");
   }
   const inBcHandles = new Set(products.map((row) => row.key));
   summary.products_drafted ??= 0;
@@ -539,8 +539,49 @@ async function toDraft({ ctx, medusa, budget }) {
     }
     // Changing the status does not remove a product from the list, so offsets hold.
     state.cursor += page.length;
-    if (!page.length || state.cursor >= count) return next(state, "priceListsRead");
+    if (!page.length || state.cursor >= count) return next(state, "costs");
   }
+}
+
+// ---- costs: BC's Unit Cost to Medusa's admin-only product-costs ----
+
+const COST_BATCH = 100;
+
+/** The /admin/product-costs items for one batch of synced products; products without a cost in BC are left out. */
+export const costItems = (rows) =>
+  rows
+    .filter((row) => row.result && ["created", "updated", "update_failed"].includes(row.result.status) && row.payload.unit_cost > 0)
+    .map((row) => ({ product_handle: row.payload.handle, cost: row.payload.unit_cost }));
+
+/**
+ * Sends the cost of every product this run synced, for all of its variants (BC keeps Unit Cost per item).
+ * The cost is for the owner and the media-buyer agent only, so it goes to its own admin endpoint, never into metadata.
+ * A Medusa without that endpoint yet (404) is noted once and skipped: the item sync must not fail over it.
+ */
+export async function costs({ ctx, medusa, budget }) {
+  const { state, summary } = ctx;
+  summary.costs_written ??= 0;
+  if (state.costsRefused) return next(state, "priceListsRead");
+  const rows = ctx.work("product", state.cursor, COST_BATCH);
+  if (!rows.length) {
+    const without = ctx.work("product").filter((row) => row.result && row.payload.unit_cost === undefined).length;
+    if (without) ctx.note({ kind: "cost", ref: "-", message: `${without} synced items have no Unit Cost in Business Central; no cost recorded for them.` });
+    return next(state, "priceListsRead");
+  }
+  if (budget.left() < 3) return;
+  const items = costItems(rows);
+  if (items.length) {
+    try {
+      const result = await medusa.post("/admin/product-costs", { items });
+      summary.costs_written += (result.created ?? 0) + (result.updated ?? 0);
+      for (const handle of result.unknown_handles ?? []) ctx.note({ kind: "cost", ref: handle, message: "Product not found in Medusa; cost not recorded." });
+    } catch (error) {
+      state.costsRefused = true;
+      ctx.note({ kind: "cost", ref: "Medusa", message: `Costs not written: ${error.message}` });
+      return next(state, "priceListsRead");
+    }
+  }
+  state.cursor = rows[rows.length - 1].seq + 1;
 }
 
 // ---- price lists: read BC's, then upsert by code ----
