@@ -1,4 +1,7 @@
-import { bcCredentials, listBcCompanies, listBcItems, listBcLocations, listBcODataRows, listBcPaymentMethods } from "./lib/bc.js";
+import { bcCredentials, bcGet, bcGetBinary, listBcCompanies, listBcItems, listBcLocations, listBcODataRows, listBcPaymentMethods, putBcItemPicture, searchBcItems } from "./lib/bc.js";
+import { decodePicture, itemSearchFilter, listedItem } from "./lib/pictures.js";
+import { productHandle } from "./lib/map.js";
+import { syncProductPicture } from "./sync/images.js";
 import { mapPriceLists } from "./lib/map.js";
 import { medusaClient } from "./lib/medusa.js";
 import { checkBusinessCentral, checkMedusa, describeSettings, isAuthorized } from "./config.js";
@@ -22,6 +25,12 @@ import { checkMarketingTextService, DEFAULT_ITEM_CARD_SERVICE, DEFAULT_MARKETING
 //   POST /api/middleware/mappings/{locations,payments,shipping}   { mappings: [{ id, code|null }] }
 //   GET  /api/middleware/{items,categories,images,inventory,customers}/runs
 //   POST /api/middleware/{items,categories,images,inventory,customers}/run
+//   GET  /api/middleware/pictures/search?q=       BC items by number or name (the «رفع الصور» tab)
+//   GET  /api/middleware/pictures/log             the pictures written from the tab, newest first
+//   GET  /api/middleware/pictures/:itemId         the item, its BC picture (has / size) and its product in Medusa
+//   GET  /api/middleware/pictures/:itemId/content the BC picture itself, for the preview
+//   POST /api/middleware/pictures/:itemId         { image: data URL } → written to the BC item's picture
+//   POST /api/middleware/pictures/:itemId/transfer that item's picture carried to its Medusa product now
 
 const json = (body, status = 200) => Response.json(body, { status, headers: { "cache-control": "no-store" } });
 const fail = (message, status = 400) => json({ error: message }, status);
@@ -220,6 +229,87 @@ export async function middlewareApi(request, env, pathname) {
       );
       return json({ saved });
     }
+  }
+
+  // ---- «رفع الصور» (the owner, 2026-11-17): an item's picture written into BC, then carried to the store ----
+  if (pathname.startsWith("/api/middleware/pictures/")) {
+    const saved = await db.getSettings();
+    if (!saved.company_id) return fail("Choose a Business Central company in Settings first.", 409);
+    const bc = bcCredentials(env);
+    const company = `/companies(${encodeURIComponent(saved.company_id)})`;
+
+    if (pathname === "/api/middleware/pictures/search" && method === "GET") {
+      const filter = itemSearchFilter(new URL(request.url).searchParams.get("q"));
+      if (!filter) return fail("اكتب من حرفين إلى أربعين حرفًا.");
+      const items = await searchBcItems(bc, saved.company_id, filter).catch((error) => error);
+      return items instanceof Error ? fail(errorMessage(items), 502) : json({ items: items.map(listedItem) });
+    }
+    if (pathname === "/api/middleware/pictures/log" && method === "GET") return json({ uploads: await db.listPictureUploads() });
+
+    const match = pathname.match(/^\/api\/middleware\/pictures\/([0-9a-fA-F-]{36})(?:\/(content|transfer))?$/);
+    if (!match) return fail("Not found", 404);
+    const [, itemId, part] = match;
+    const itemPath = `${company}/items(${encodeURIComponent(itemId)})`;
+    const item = await bcGet(bc, `${itemPath}?$select=id,number,displayName,blocked`).catch((error) => error);
+    if (item instanceof Error) return fail(errorMessage(item), item.status === 404 ? 404 : 502);
+
+    // The item's product in Medusa, if the item sync made one (same handle, same BC id)
+    const productOf = async (medusa) => {
+      const { products } = await medusa.get("/admin/products", { handle: productHandle(item.number ?? ""), fields: "id,handle,title,status,thumbnail,metadata,images.url" });
+      return (products ?? []).find((p) => p.metadata?.bc_item_id === item.id) ?? null;
+    };
+
+    if (!part && method === "GET") {
+      const [picture, product] = await Promise.allSettled([bcGet(bc, `${itemPath}/picture`), productOf(medusaClient(env))]);
+      const pic = picture.status === "fulfilled" ? picture.value : null;
+      const p = product.status === "fulfilled" ? product.value : null;
+      return json({
+        item: listedItem(item),
+        picture: pic ? { has: Number(pic.width) > 0 && Boolean(pic.contentType), width: pic.width ?? 0, height: pic.height ?? 0, contentType: pic.contentType ?? "" } : null,
+        product: p ? { id: p.id, handle: p.handle, status: p.status, thumbnail: p.thumbnail ?? null } : null,
+        errors: {
+          picture: picture.status === "rejected" ? errorMessage(picture.reason) : null,
+          product: product.status === "rejected" ? errorMessage(product.reason) : null,
+        },
+      });
+    }
+
+    if (part === "content" && method === "GET") {
+      const picture = await bcGetBinary(bc, `${itemPath}/picture/pictureContent`).catch((error) => error);
+      if (picture instanceof Error) return fail(errorMessage(picture), 502);
+      return new Response(picture.bytes, { headers: { "content-type": picture.contentType || "application/octet-stream", "cache-control": "no-store" } });
+    }
+
+    if (!part && method === "POST") {
+      const decoded = decodePicture(body.image);
+      if (decoded.error) return fail(decoded.error);
+      const written = await putBcItemPicture(bc, saved.company_id, item.id, decoded.bytes).catch((error) => error);
+      if (written instanceof Error) return fail(errorMessage(written), 502);
+      // Cloudflare Access names the signed-in person on every request it lets through
+      const by = request.headers.get("cf-access-authenticated-user-email") || null;
+      await db.logPictureUpload({ item_id: item.id, item_number: item.number, item_name: item.displayName, bytes: decoded.bytes.length, by });
+      return json({ ok: true, item: listedItem(item), bytes: decoded.bytes.length });
+    }
+
+    if (part === "transfer" && method === "POST") {
+      const medusa = medusaClient(env);
+      const product = await productOf(medusa).catch((error) => error);
+      if (product instanceof Error) return fail(errorMessage(product), 502);
+      if (!product) return fail("لا يوجد منتج في المتجر لهذا الصنف بعد: تُنشئه مزامنة المنتجات أولًا.", 409);
+      const summary = { uploaded: 0, unchanged: 0, no_picture: 0, removed: 0, failed: 0, hidden: 0, shown: 0 };
+      const notes = [];
+      await syncProductPicture({
+        product,
+        medusa,
+        bc,
+        hide: saved.hide_without_picture === "1",
+        settings: saved,
+        summary,
+        note: (issue) => notes.push(issue),
+      });
+      return summary.failed ? fail(notes[0]?.message || "تعذّر نقل الصورة.", 502) : json({ summary, notes });
+    }
+    return fail("Not found", 404);
   }
 
   const sync = pathname.match(/^\/api\/middleware\/(items|categories|images|inventory|customers)\/(runs|run)$/);

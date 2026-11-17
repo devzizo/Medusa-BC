@@ -70,7 +70,17 @@ async function pictures({ ctx, medusa, bc, budget, hide }) {
   while (budget.left() > 5) {
     const [row] = ctx.work("product", state.cursor, 1);
     if (!row) return next(state, "done");
-    const product = row.payload;
+    await syncProductPicture({ product: row.payload, medusa, bc, budget, hide, settings, summary, note: ctx.note });
+    state.cursor = row.seq + 1;
+  }
+}
+
+/**
+ * One product's picture from BC, as a run does it (and the «رفع الصور» tab, for the item it just wrote): upload a new
+ * or changed picture, remove one BC no longer has, and apply the no-picture rule. Counts into `summary`.
+ */
+export async function syncProductPicture({ product, medusa, bc, budget, hide, settings, summary, note }) {
+  {
     const metadata = product.metadata ?? {};
     const others = (product.images ?? []).map((image) => image.url).filter((url) => url && url !== metadata.bc_picture_url);
     try {
@@ -115,13 +125,12 @@ async function pictures({ ctx, medusa, bc, budget, hide }) {
         });
         if (visibility.flag) {
           summary.hidden++;
-          ctx.note({ kind: "picture", ref: metadata.bc_item_number, message: `${product.title}: no picture in Business Central or Medusa; changed to draft until it has one.` });
+          note({ kind: "picture", ref: metadata.bc_item_number, message: `${product.title}: no picture in Business Central or Medusa; changed to draft until it has one.` });
         } else summary.shown++;
       }
     } catch (error) {
       summary.failed++;
-      ctx.note({ kind: "picture", ref: metadata.bc_item_number, message: `${product.title}: ${error?.message || error}` });
+      note({ kind: "picture", ref: metadata.bc_item_number, message: `${product.title}: ${error?.message || error}` });
     }
-    state.cursor = row.seq + 1;
   }
 }
