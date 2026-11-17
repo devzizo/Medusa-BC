@@ -176,6 +176,22 @@ Sub-tab "الصور" under Item sync, run kind `images`.
   A newly created product is published by the item sync and hidden by the next picture sync, so run pictures after items.
 - ≤ 5 calls per product (picture, content, upload, update, visibility).
 
+### 6.1c Picture upload — tab «رفع الصور» (`src/lib/pictures.js`, `/api/middleware/pictures/*`)
+
+The owner, 2026-11-17: customer service puts an item's picture into Business Central from this page; the picture sync
+carries it to the store as for any BC picture.
+
+- Search BC items by number or name (`contains(number,…) or contains(displayName,…)`, quotes doubled, 2–40 chars, first 20).
+- The browser resizes the chosen JPEG/PNG (longest side 1600 px, transparency onto white) and sends a JPEG data URL; the
+  Worker accepts only `image/jpeg` / `image/png` whose bytes start as that type does, ≤ 3 MB.
+- Written with `PATCH items({id})/picture/pictureContent`, `If-Match: *`, `Content-Type: application/octet-stream`, the raw
+  bytes. Replacing an existing picture asks for confirmation first.
+- «إظهارها في المتجر الآن» runs the picture sync's own step (`syncProductPicture`) for that one product, no-picture rule
+  included; otherwise the next picture sync carries it.
+- Every write is logged (time, item, size, and the Cloudflare Access user from `cf-access-authenticated-user-email`), last
+  200 kept, last 30 shown.
+- The service principal needs write permission on items in BC; the first real upload is the check of that.
+
 ### 6.2 Inventory sync (BC → Medusa) — `src/sync/inventory.js`
 
 - Source: published **Item Ledger Entries** (page 38). Stock per location = sum of `Remaining_Quantity`

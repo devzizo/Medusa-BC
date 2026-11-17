@@ -185,6 +185,29 @@ export const listBcItems = async (credentials, companyId, options, { includeBloc
         (item) => item.blocked !== true,
       );
 
+/** Items matching an OData filter (lib/pictures.js itemSearchFilter), the first 20. */
+export const searchBcItems = async (credentials, companyId, filter, options) =>
+  (await bcGet(credentials, `${companyPath(companyId)}/items?$filter=${encodeURIComponent(filter)}&$top=20&$select=id,number,displayName,blocked`, options)).value ?? [];
+
+/**
+ * Writes an item's picture (API v2.0: PATCH items({id})/picture/pictureContent, If-Match *, the raw bytes as the body).
+ * BC answers 204 with no body.
+ */
+export async function putBcItemPicture(credentials, companyId, itemId, bytes, options = {}) {
+  const token = await bcToken(credentials, options);
+  options.budget?.use();
+  const url = `${bcApiRoot(credentials.url)}${companyPath(companyId)}/items(${encodeURIComponent(itemId)})/picture/pictureContent`;
+  const res = await timed(url, {
+    method: "PATCH",
+    headers: { authorization: `Bearer ${token}`, "content-type": "application/octet-stream", "if-match": "*" },
+    body: bytes,
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new BcError("http_error", `Business Central refused the picture (HTTP ${res.status})${data.error?.message ? `: ${data.error.message}` : ""}`, res.status);
+  }
+}
+
 /** Every customer, blocked ones included (their state goes into metadata). */
 export const listBcCustomers = (credentials, companyId, options) =>
   bcGetAll(credentials, `${companyPath(companyId)}/customers`, options);

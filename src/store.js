@@ -75,6 +75,8 @@ export class MiddlewareStore extends DurableObject {
         bc_order_id TEXT, bc_order_number TEXT, bc_total REAL, medusa_total REAL, at TEXT NOT NULL, error TEXT);
       CREATE TABLE IF NOT EXISTS work (run_id TEXT NOT NULL, kind TEXT NOT NULL, seq INTEGER NOT NULL,
         key TEXT NOT NULL, payload TEXT NOT NULL, result TEXT, PRIMARY KEY (run_id, kind, seq));
+      CREATE TABLE IF NOT EXISTS picture_upload (at TEXT NOT NULL, item_id TEXT NOT NULL, item_number TEXT,
+        item_name TEXT, bytes INTEGER, by TEXT);
     `);
     // Columns added after order_sync first shipped: what BC said at the last check.
     for (const column of ["bc_status TEXT", "bc_detail TEXT", "checked_at TEXT", "done INTEGER DEFAULT 0"]) {
@@ -88,6 +90,25 @@ export class MiddlewareStore extends DurableObject {
 
   rows(query, ...bindings) {
     return this.sql.exec(query, ...bindings).toArray();
+  }
+
+  // ---- «رفع الصور»: every picture written to BC from the page, who and when (the last 200 kept) ----
+
+  logPictureUpload(row) {
+    this.sql.exec(
+      "INSERT INTO picture_upload (at, item_id, item_number, item_name, bytes, by) VALUES (?, ?, ?, ?, ?, ?)",
+      new Date().toISOString(),
+      row.item_id,
+      row.item_number ?? null,
+      row.item_name ?? null,
+      row.bytes ?? null,
+      row.by ?? null,
+    );
+    this.sql.exec("DELETE FROM picture_upload WHERE rowid NOT IN (SELECT rowid FROM picture_upload ORDER BY at DESC LIMIT 200)");
+  }
+
+  listPictureUploads() {
+    return this.rows("SELECT at, item_id, item_number, item_name, bytes, by FROM picture_upload ORDER BY at DESC LIMIT 30");
   }
 
   // ---- Settings ----
