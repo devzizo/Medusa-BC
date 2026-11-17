@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import { expect } from "./expect.js";
-import { bcSkus, detectLedgerFields, ledgerQuery, sumInventory } from "../src/lib/inventory.js";
+import { spreadItemStockToVariants, bcSkus, detectLedgerFields, ledgerQuery, sumInventory } from "../src/lib/inventory.js";
 
 const full = { item: "Item_No", location: "Location_Code", variant: "Variant_Code", quantity: "Remaining_Quantity", remainingOnly: true };
 
@@ -64,5 +64,17 @@ describe("bcSkus", () => {
       ],
     );
     expect([...skus].sort()).toEqual(["1000", "2000", "2000-GREY"]);
+  });
+});
+
+describe("spreadItemStockToVariants", () => {
+  it("gives each non-blocked variant its item's stock, leaving other SKUs alone", () => {
+    const stock = { "2000": { MAIN: 5 }, "3000": { MAIN: 2 } };
+    const spread = spreadItemStockToVariants(
+      stock,
+      [{ id: "b", number: "2000" }],
+      [{ itemId: "b", code: "160" }, { itemId: "b", code: "OLD", blocked: true }, { itemId: "gone", code: "X" }],
+    );
+    expect(spread).toEqual({ "2000": { MAIN: 5 }, "3000": { MAIN: 2 }, "2000-160": { MAIN: 5 } });
   });
 });
