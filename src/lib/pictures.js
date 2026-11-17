@@ -30,14 +30,16 @@ export const decodePicture = (dataUrl) => {
 };
 
 /**
- * The OData filter for the search box: by item number or by name, case as BC keeps it. Quotes are doubled (OData's
- * own escape), so what is typed is always text inside the filter, never part of it. Two to forty characters.
+ * The OData filters for the search box: one for the item number, one for the name (BC refuses an 'or' across two
+ * different fields: «The 'OR' operator is not supported on distinct fields», so they are two queries whose answers are
+ * merged). Quotes are doubled (OData's own escape), so what is typed is always text inside a filter, never part of it.
+ * Two to forty characters.
  */
-export const itemSearchFilter = (query) => {
+export const itemSearchFilters = (query) => {
   const q = typeof query === "string" ? query.trim() : "";
   if (q.length < 2 || q.length > 40) return null;
   const text = q.replace(/'/g, "''");
-  return `contains(number,'${text}') or contains(displayName,'${text}')`;
+  return [`contains(number,'${text}')`, `contains(displayName,'${text}')`];
 };
 
 /** A BC item as the tab lists it. */

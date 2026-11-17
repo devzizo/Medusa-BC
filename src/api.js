@@ -1,5 +1,5 @@
 import { bcCredentials, bcGet, bcGetBinary, listBcCompanies, listBcItems, listBcLocations, listBcODataRows, listBcPaymentMethods, putBcItemPicture, searchBcItems } from "./lib/bc.js";
-import { decodePicture, itemSearchFilter, listedItem } from "./lib/pictures.js";
+import { decodePicture, itemSearchFilters, listedItem } from "./lib/pictures.js";
 import { productHandle } from "./lib/map.js";
 import { syncProductPicture } from "./sync/images.js";
 import { mapPriceLists } from "./lib/map.js";
@@ -239,9 +239,9 @@ export async function middlewareApi(request, env, pathname) {
     const company = `/companies(${encodeURIComponent(saved.company_id)})`;
 
     if (pathname === "/api/middleware/pictures/search" && method === "GET") {
-      const filter = itemSearchFilter(new URL(request.url).searchParams.get("q"));
-      if (!filter) return fail("اكتب من حرفين إلى أربعين حرفًا.");
-      const items = await searchBcItems(bc, saved.company_id, filter).catch((error) => error);
+      const filters = itemSearchFilters(new URL(request.url).searchParams.get("q"));
+      if (!filters) return fail("اكتب من حرفين إلى أربعين حرفًا.");
+      const items = await searchBcItems(bc, saved.company_id, filters).catch((error) => error);
       return items instanceof Error ? fail(errorMessage(items), 502) : json({ items: items.map(listedItem) });
     }
     if (pathname === "/api/middleware/pictures/log" && method === "GET") return json({ uploads: await db.listPictureUploads() });
