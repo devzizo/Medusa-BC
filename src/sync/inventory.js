@@ -1,6 +1,6 @@
 import { bcCredentials, listBcItems, listBcItemVariants, listBcODataRows } from "../lib/bc.js";
 import { makeBudget, medusaClient } from "../lib/medusa.js";
-import { bcSkus, detectLedgerFields, ledgerQuery, roundQuantity, sumInventory } from "../lib/inventory.js";
+import { bcSkus, detectLedgerFields, ledgerQuery, roundQuantity, spreadItemStockToVariants, sumInventory } from "../lib/inventory.js";
 
 // The stock sync, BC → Medusa. For every Medusa variant whose SKU BC has,
 // and every Medusa stock location mapped to a BC location, the stocked
@@ -73,12 +73,13 @@ async function read({ ctx, medusa, bc, budget }) {
       ctx.note({
         kind: "page",
         ref: service,
-        message: "The published page has no Variant Code: stock is counted per item, so variants of items that have variants get 0.",
+        message: "The published page has no Variant Code: stock is counted per item and every variant takes its item's total.",
       });
     }
     const entries = await listBcODataRows(bc, settings.company_name, service, ledgerQuery(codes, fields), options);
     summary.bc_entries = entries.length;
     stock = sumInventory(entries, codes, fields);
+    if (!fields.variant) stock = spreadItemStockToVariants(stock, items, variants);
   }
 
   ctx.putWork("sku", skus.map((sku) => ({ key: sku, payload: stock[sku] ?? {} })));

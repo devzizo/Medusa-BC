@@ -59,6 +59,24 @@ export const sumInventory = (entries, locationCodes, fields) => {
   return stock;
 };
 
+/**
+ * Fallback while the ledger page has no Variant Code (the owner, 2026-11-17:
+ * "publish by the general stock"): each non-blocked variant takes its item's
+ * total, so the sizes of an item that is in stock read as available. It
+ * overstates a size that is really out; it ends when the page gains the column.
+ */
+export const spreadItemStockToVariants = (stock, items, variants) => {
+  const numberById = new Map(items.map((item) => [item.id, item.number]));
+  const spread = { ...stock };
+  for (const variant of variants) {
+    if (variant.blocked === true || !variant.code) continue;
+    const number = numberById.get(variant.itemId);
+    if (!number || !stock[variantSku(number)]) continue;
+    spread[variantSku(number, variant.code)] = { ...stock[variantSku(number)] };
+  }
+  return spread;
+};
+
 /** Every SKU BC has for its non-blocked items: the item's own, and one per non-blocked variant. */
 export const bcSkus = (items, variants) => {
   const skus = new Set(items.filter((item) => item.number).map((item) => variantSku(item.number)));
