@@ -270,6 +270,10 @@
             الصورة تُرفع إلى مخزن ملفات Medusa وتصير الصورة الأولى، والصورة المصغّرة إن لم يُختر غيرها. الصور المضافة في Medusa تبقى.
             الصورة التي لم تتغير في BC لا تُرفع مرة ثانية، والصورة المحذوفة من BC تُحذف من المنتج. شغّلها بعد مزامنة المنتجات.
           </p>
+          <label class="check"><input type="checkbox" id="hide_without_picture" data-testid="opt-hide-without-picture">
+            المنتج الذي لا توجد له صورة (لا من BC ولا مضافة في Medusa) يتحول إلى draft <span class="notice">— مغلق افتراضيًا؛ عند تشغيله ينزل من الموقع كل منتج بلا صورة. وحين تصله صورة يُرفع عنه الإخفاء وتنشره مزامنة المنتجات التالية. وإن أُلغي الخيار يُرفع الإخفاء عن الكل</span></label>
+          <div class="row" style="margin-top:8px"><button id="save-image-options" data-testid="save-image-options">حفظ الخيار</button></div>
+          <div class="result" id="result-image-options" data-testid="result-image-options"></div>
           <div class="row" style="margin-top:12px">
             <button data-run="images" data-testid="run-images">بدء نقل الصور</button>
             <span class="notice" data-notice="images"></span>
@@ -438,6 +442,8 @@
         showSavedCompanyOption();
         // Unset means on; "0" is off.
         for (const key of ["skip_blocked", "draft_zero_inventory", "publish_synced", "changed_only"]) $(key).checked = saved[key] !== "0";
+        // Unlike those, this one is off until switched on ("1")
+        $("hide_without_picture").checked = saved.hide_without_picture === "1";
         $("price_list_service").placeholder = data.defaults.price_list_service;
         $("price_list_line_service").placeholder = data.defaults.price_list_line_service;
         $("inventory_service").placeholder = data.defaults.inventory_service;
@@ -543,6 +549,15 @@
         show($("result-price-lists"), true, escape(all ? "حُفظ: كل قوائم البيع النشطة تُنقل في المزامنة القادمة." : `حُفظ: ${codes.length} قائمة تُنقل في المزامنة القادمة.`));
       } catch (error) {
         show($("result-price-lists"), false, escape(error.message));
+      }
+    });
+
+    $("save-image-options").addEventListener("click", async () => {
+      try {
+        saved = (await api("settings", { hide_without_picture: $("hide_without_picture").checked ? "1" : "0" })).saved;
+        show($("result-image-options"), true, "حُفظ الخيار. يُطبَّق في نقل الصور القادم.");
+      } catch (error) {
+        show($("result-image-options"), false, escape(error.message));
       }
     });
 

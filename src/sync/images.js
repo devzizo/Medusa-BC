@@ -12,8 +12,9 @@ import { productHandle } from "../lib/map.js";
 // A product with no picture at all (none from BC, none added in Medusa, no thumbnail) is not shown: the owner's call, 2026-11-17
 // («ما ينزل أي منتج بالموقع ما له صورة»). The picture sync is where that is known, so it drafts such a product and marks it
 // (metadata.bc_hidden_no_picture); the item sync leaves a marked product a draft, and the picture sync lifts the mark when a
-// picture arrives - the next item sync then publishes it (it alone knows whether the item is blocked). HIDE_WITHOUT_PICTURE=false
-// turns the rule off: marks are lifted and the item sync publishes as before.
+// picture arrives - the next item sync then publishes it (it alone knows whether the item is blocked). It is the option «hide_without_picture»
+// of the picture sync (the owner asked for it as an option): off by default, since turning it on takes every product with no
+// picture off the site; turned off again, marks are lifted and the item sync publishes as before.
 export const pictureVisibility = ({ hide, hasImage, status, flagged }) => {
   if (hide && !hasImage) return status === "published" ? { status: "draft", flag: true } : {};
   return flagged ? { flag: false } : {};
@@ -28,7 +29,7 @@ export async function runImageSyncStep(ctx, env) {
   const medusa = medusaClient(env, budget);
   const bc = bcCredentials(env);
   const { state } = ctx;
-  const hide = env.HIDE_WITHOUT_PICTURE !== "false";
+  const hide = ctx.settings.hide_without_picture === "1";
   const stages = { read: index, pictures };
   while (state.stage !== "done" && budget.left() > 5) {
     const before = `${state.stage}:${state.cursor}`;

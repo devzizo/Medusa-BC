@@ -170,8 +170,9 @@ Sub-tab "الصور" under Item sync, run kind `images`.
 - **No picture, not shown** (owner, 2026-11-17): a product with no picture at all - none from BC, no other image and no
   thumbnail added in Medusa - is set to draft and marked `metadata.bc_hidden_no_picture`. The item sync leaves a marked
   product a draft; when a picture arrives the picture sync lifts the mark and the **next item sync** publishes it (it alone
-  knows whether the item is blocked). A draft with no picture (blocked in BC) is not touched. `HIDE_WITHOUT_PICTURE=false`
-  turns the rule off: marks are lifted and the item sync publishes as before. The run reports `hidden` and `shown`.
+  knows whether the item is blocked). A draft with no picture (blocked in BC) is not touched. It is
+  the picture sync's option `hide_without_picture` (Images tab, a checkbox; **off by default**, "1" = on): turned off, marks are
+  lifted and the item sync publishes as before. The run reports `hidden` and `shown`.
   A newly created product is published by the item sync and hidden by the next picture sync, so run pictures after items.
 - ≤ 5 calls per product (picture, content, upload, update, visibility).
 
