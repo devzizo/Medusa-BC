@@ -181,7 +181,9 @@ Sub-tab "الصور" under Item sync, run kind `images`.
 The owner, 2026-11-17: customer service puts an item's picture into Business Central from this page; the picture sync
 carries it to the store as for any BC picture.
 
-- Search BC items by number or name (`contains(number,…) or contains(displayName,…)`, quotes doubled, 2–40 chars, first 20).
+- Search BC items by number or name: **two** queries, `contains(number,…)` and `contains(displayName,…)`, merged (BC answers
+  501 «The 'OR' operator is not supported on distinct fields» to one filter naming both fields - seen live, 2026-11-17); quotes
+  doubled, 2–40 chars, first 20, each item once.
 - The browser resizes the chosen JPEG/PNG (longest side 1600 px, transparency onto white) and sends a JPEG data URL; the
   Worker accepts only `image/jpeg` / `image/png` whose bytes start as that type does, ≤ 3 MB.
 - Written with `PATCH items({id})/picture/pictureContent`, `If-Match: *`, `Content-Type: application/octet-stream`, the raw

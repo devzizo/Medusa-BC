@@ -185,9 +185,19 @@ export const listBcItems = async (credentials, companyId, options, { includeBloc
         (item) => item.blocked !== true,
       );
 
-/** Items matching an OData filter (lib/pictures.js itemSearchFilter), the first 20. */
-export const searchBcItems = async (credentials, companyId, filter, options) =>
-  (await bcGet(credentials, `${companyPath(companyId)}/items?$filter=${encodeURIComponent(filter)}&$top=20&$select=id,number,displayName,blocked`, options)).value ?? [];
+/**
+ * Items matching any of the filters (lib/pictures.js itemSearchFilters: BC takes no 'or' across fields, so one query each,
+ * run together), each item once, the first 20 - the number matches first.
+ */
+export const searchBcItems = async (credentials, companyId, filters, options) => {
+  const answers = await Promise.all(
+    filters.map((filter) =>
+      bcGet(credentials, `${companyPath(companyId)}/items?$filter=${encodeURIComponent(filter)}&$top=20&$select=id,number,displayName,blocked`, options).then((r) => r.value ?? []),
+    ),
+  );
+  const seen = new Set();
+  return answers.flat().filter((item) => !seen.has(item.id) && seen.add(item.id)).slice(0, 20);
+};
 
 /**
  * Writes an item's picture (API v2.0: PATCH items({id})/picture/pictureContent, If-Match *, the raw bytes as the body).

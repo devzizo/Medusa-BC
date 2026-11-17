@@ -1,7 +1,7 @@
 import { describe, it, before, after } from "node:test";
 import http from "node:http";
 import { expect } from "./expect.js";
-import { decodePicture, itemSearchFilter, listedItem, MAX_PICTURE_BYTES } from "../src/lib/pictures.js";
+import { decodePicture, itemSearchFilters, listedItem, MAX_PICTURE_BYTES } from "../src/lib/pictures.js";
 import { middlewareApi } from "../src/api.js";
 
 const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, ...new Array(200).fill(7)]);
@@ -26,15 +26,15 @@ describe("decodePicture", () => {
   });
 });
 
-describe("itemSearchFilter", () => {
-  it("searches the number and the name", () => {
-    expect(itemSearchFilter(" 08213 ")).toEqual("contains(number,'08213') or contains(displayName,'08213')");
+describe("itemSearchFilters", () => {
+  it("is one filter for the number and one for the name, never an 'or' across the two fields", () => {
+    expect(itemSearchFilters(" 08213 ")).toEqual(["contains(number,'08213')", "contains(displayName,'08213')"]);
   });
   it("doubles a quote, so what is typed stays text inside the filter", () => {
-    expect(itemSearchFilter("x') or (1 eq 1")).toEqual("contains(number,'x'') or (1 eq 1') or contains(displayName,'x'') or (1 eq 1')");
+    expect(itemSearchFilters("x') or (1 eq 1")).toEqual(["contains(number,'x'') or (1 eq 1')", "contains(displayName,'x'') or (1 eq 1')"]);
   });
   it("needs 2 to 40 characters", () => {
-    expect([itemSearchFilter("a"), itemSearchFilter("x".repeat(41)), itemSearchFilter(null)]).toEqual([null, null, null]);
+    expect([itemSearchFilters("a"), itemSearchFilters("x".repeat(41)), itemSearchFilters(null)]).toEqual([null, null, null]);
   });
   it("lists an item by id, number, name and blocked", () => {
     expect(listedItem({ id: "i", number: "1", displayName: "n", blocked: true, other: 1 })).toEqual({ id: "i", number: "1", name: "n", blocked: true });
@@ -64,7 +64,13 @@ describe("the «رفع الصور» routes", () => {
         };
         if (url.pathname.endsWith("/oauth2/v2.0/token")) return send(200, { access_token: "t", expires_in: 3600 });
         const company = `/api/v2.0/companies(${COMPANY})`;
-        if (req.method === "GET" && url.pathname === `${company}/items`) return send(200, { value: [{ id: ITEM, number: "08213", displayName: "مرتبة هوفن كلاسيك", blocked: false }] });
+        if (req.method === "GET" && url.pathname === `${company}/items`) {
+          // What the real BC does with an 'or' across two fields (seen live, 2026-11-17)
+          const filter = url.searchParams.get("$filter") ?? "";
+          if (filter.includes(") or contains(displayName,")) return send(501, { error: { message: "The 'OR' operator is not supported on distinct fields on an OData filter." } });
+          // A name search finds the item; a number search finds the same one (it must be listed once)
+          return send(200, { value: [{ id: ITEM, number: "08213", displayName: "مرتبة هوفن كلاسيك", blocked: false }] });
+        }
         if (req.method === "GET" && url.pathname === `${company}/items(${ITEM})`) return send(200, { id: ITEM, number: "08213", displayName: "مرتبة هوفن كلاسيك", blocked: false });
         if (req.method === "PATCH" && url.pathname === `${company}/items(${ITEM})/picture/pictureContent`) {
           pictureBytes = body;
@@ -120,8 +126,9 @@ describe("the «رفع الصور» routes", () => {
     const { status, data } = await call("/api/middleware/pictures/search?q=0821");
     expect(status).toEqual(200);
     expect(data.items).toEqual([{ id: ITEM, number: "08213", name: "مرتبة هوفن كلاسيك", blocked: false }]);
-    const q = seen.find((s) => s.path.endsWith("/items") && s.method === "GET").query;
-    expect(decodeURIComponent(q).includes("contains(number,'0821') or contains(displayName,'0821')")).toEqual(true);
+    const queries = seen.filter((s) => s.path.endsWith("/items") && s.method === "GET").map((s) => decodeURIComponent(s.query));
+    expect(queries.some((q) => q.includes("$filter=contains(number,'0821')&"))).toEqual(true);
+    expect(queries.some((q) => q.includes("$filter=contains(displayName,'0821')&"))).toEqual(true);
   });
 
   it("refuses a search shorter than two characters", async () => {
