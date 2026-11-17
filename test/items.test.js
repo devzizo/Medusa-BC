@@ -19,6 +19,12 @@ describe("syncedStatus", () => {
     expect(syncedStatus(empty, { status: "published" }, true)).toEqual("draft");
   });
 
+  it("keeps a product the picture sync hid a draft, even when publishing; a lifted mark publishes it again", () => {
+    expect(syncedStatus(ok, { status: "draft", metadata: { bc_hidden_no_picture: true } }, true)).toEqual("draft");
+    expect(syncedStatus(ok, { status: "draft", metadata: { bc_hidden_no_picture: "" } }, true)).toEqual("published");
+    expect(syncedStatus(ok, { status: "draft", metadata: {} }, true)).toEqual("published");
+  });
+
   it("with publishing off: new items are drafts, rejected ones go back to draft, the rest keep the admin's status", () => {
     expect(syncedStatus(ok, null, false)).toEqual("draft");
     expect(syncedStatus(ok, { status: "rejected" }, false)).toEqual("draft");
