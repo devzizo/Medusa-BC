@@ -46,6 +46,8 @@ export const SETTING_KEYS = [
   "draft_zero_inventory",
   "publish_synced",
   "changed_only",
+  // Picture sync option, "1" = on (unset = off): a product with no picture at all becomes a draft (sync/images.js).
+  "hide_without_picture",
 ];
 
 const MAPPINGS = {

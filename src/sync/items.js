@@ -274,9 +274,11 @@ async function categories({ ctx, medusa, budget }) {
 // options): a draft. Otherwise, with "publish synced items" on (the default),
 // published; with it off, a new product is a draft, a product rejected by an
 // older run goes back to draft for an admin to publish, and any other status
-// is the admin's and stays as it is (undefined = leave it).
+// is the admin's and stays as it is (undefined = leave it). A product the picture sync hid (no picture at all) stays a draft.
 export const syncedStatus = (product, current, publish) => {
   if (product.draft_reason) return "draft";
+  // Kept hidden by the picture sync until it has a picture (sync/images.js)
+  if (current?.metadata?.bc_hidden_no_picture) return "draft";
   if (publish) return "published";
   if (!current || current.status === "rejected") return "draft";
   return undefined;

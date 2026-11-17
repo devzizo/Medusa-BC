@@ -83,6 +83,7 @@ const PUBLIC_SETTINGS = [
   "draft_zero_inventory",
   "publish_synced",
   "changed_only",
+  "hide_without_picture",
 ];
 
 export async function middlewareApi(request, env, pathname) {
